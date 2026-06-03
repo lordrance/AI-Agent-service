@@ -7,14 +7,15 @@ import json
 import uuid
 from typing import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from loguru import logger
 from openai import AsyncOpenAI
 
 from app.config import get_settings
 from app.core.intent.recognizer import IntentRecognizer
-from app.infrastructure.llm.model_router import ModelConfig, ModelRouter
+from app.core.langgraph.graph import run_chat
 from app.infrastructure.trace.langfuse_exporter import export_trace
 from app.infrastructure.trace.tracer import Tracer
 from app.models.schemas import ChatRequest, ChatResponse
@@ -25,24 +26,30 @@ _tracer = Tracer()
 _intent = IntentRecognizer()
 
 
-def _build_router() -> ModelRouter:
-    """根据配置构造模型路由器。"""
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=503, detail="未配置 OPENAI_API_KEY，无法调用模型")
-    cfg = ModelConfig(
-        model_id=settings.openai_model,
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_api_base or None,
-        priority=0,
-        weight=1.0,
-    )
-    return ModelRouter([cfg])
+def _to_lc_messages(request: ChatRequest) -> list[BaseMessage]:
+    """把 API 消息转换为 LangChain 消息类型。"""
+    out: list[BaseMessage] = []
+    for m in request.messages:
+        if m.role == "assistant":
+            out.append(AIMessage(content=m.content))
+        elif m.role == "system":
+            out.append(SystemMessage(content=m.content))
+        else:
+            out.append(HumanMessage(content=m.content))
+    return out
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
-    """非流式对话：经意图识别与链路追踪后返回完整回复。"""
+async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
+    """非流式对话：经意图识别与链路追踪，通过 LangGraph 对话图（带检查点）作答。
+
+    提供 `conversation_id` 时复用同一 thread 的历史（由检查点续接），
+    此时建议仅发送新一轮消息；不提供则视为一次性会话。
+    """
+    graph = getattr(http_request.app.state, "chat_graph", None)
+    if graph is None:
+        raise HTTPException(status_code=503, detail="未配置 OPENAI_API_KEY，对话图不可用")
+
     trace_id = str(uuid.uuid4())
     span = _tracer.start_trace(trace_id, "chat")
 
@@ -57,34 +64,21 @@ async def chat(request: ChatRequest) -> ChatResponse:
             intent.sub_intent,
         )
 
-        router_llm = _build_router()
-        messages = [m.model_dump() for m in request.messages]
+        lc_messages = _to_lc_messages(request)
         if clarify and intent.confidence < _intent.confidence_threshold:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": f"（系统提示：{clarify}）",
-                }
-            )
+            lc_messages.append(SystemMessage(content=f"（系统提示：{clarify}）"))
 
-        resp = await router_llm.chat(
-            messages,
-            model_preference=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-        )
+        thread_id = request.conversation_id or str(uuid.uuid4())
+        content = await run_chat(graph, thread_id, lc_messages)
 
-        _tracer.end_span(
-            span,
-            result={"model": resp.model_id, "usage": resp.usage},
-        )
+        _tracer.end_span(span, result={"thread_id": thread_id})
 
         response = ChatResponse(
             id=str(uuid.uuid4()),
-            model=resp.model_id,
-            content=resp.content,
+            model=request.model or get_settings().openai_model,
+            content=content,
             trace_id=trace_id,
-            usage=resp.usage,
+            usage=None,
         )
         export_trace(trace_id, _tracer.get_trace(trace_id))
         return response
