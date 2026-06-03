@@ -14,8 +14,8 @@
 - [~] S0.4 配置补齐：Langfuse 已完成；embedding/向量库/鉴权/限流/超时预算随对应 Epic 增量补齐。
 
 ## Epic 1 — LangGraph + pgvector 打通四条主链路（P0）
-- [ ] S1.1 `VectorStore` 端口 + pgvector 实现 + 嵌入工厂。验证：写入/检索 round-trip。
-- [ ] S1.2 文档上传接 ETL→嵌入→pgvector（用 `on_chunks` 回调）。验证：上传后可检索。
+- [x] S1.1 `VectorStore` 端口 + pgvector 实现 + 嵌入工厂。验证：对真实 PG+pgvector 写入/检索 round-trip 通过（RAG 文档检索 Top-1）。
+- [x] S1.2 文档上传接 ETL→嵌入→pgvector。验证：集成测试上传→嵌入→入库，向量数=分块数。
 - [ ] S1.3 LangGraph 对话图 + `AsyncPostgresSaver` 检查点。验证：多轮会话跨重启保持。
 - [ ] S1.4 `/rag/query`：检索→重排→生成带引用。验证：黄金集冒烟。
 - [ ] S1.5 `/agent`：ReAct/Plan 节点 + 内置工具，含递归/超时上限。验证：端到端跑通。
