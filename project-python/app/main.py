@@ -4,8 +4,11 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from app.api.middleware_stack import configure_middleware
+from app.api.rate_limit import setup_rate_limit
 from app.api.routes import agent, chat, document, health, rag
 from app.config import get_settings
 from app.core.langgraph.graph import build_chat_graph
@@ -28,9 +31,7 @@ async def _init_chat_graph(app: FastAPI, settings, stack: AsyncExitStack) -> Non
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
         dsn = _to_asyncpg_dsn(settings.database_url)
-        checkpointer = await stack.enter_async_context(
-            AsyncPostgresSaver.from_conn_string(dsn)
-        )
+        checkpointer = await stack.enter_async_context(AsyncPostgresSaver.from_conn_string(dsn))
         await checkpointer.setup()
         logger.info("LangGraph Postgres 检查点已就绪")
     except Exception as exc:  # noqa: BLE001
@@ -38,6 +39,13 @@ async def _init_chat_graph(app: FastAPI, settings, stack: AsyncExitStack) -> Non
         checkpointer = None
 
     app.state.chat_graph = build_chat_graph(model_fn, checkpointer=checkpointer)
+
+
+def _parse_cors_origins(raw: str) -> list[str]:
+    raw = raw.strip()
+    if raw == "*":
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 
 @asynccontextmanager
@@ -64,6 +72,20 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=lifespan,
     )
+
+    configure_middleware(application, settings)
+    setup_rate_limit(application)
+
+    origins = _parse_cors_origins(settings.cors_origins)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=origins != ["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-Id", "X-Tenant-Id", "X-Trace-Id"],
+    )
+
     application.include_router(health.router, prefix=settings.api_prefix)
     application.include_router(chat.router, prefix=settings.api_prefix)
     application.include_router(document.router, prefix=settings.api_prefix)

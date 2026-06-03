@@ -27,3 +27,5 @@ openai>=1.60.0
 numpy>=2.0.0
 alembic>=1.13.0
 pgvector>=0.3.0
+slowapi>=0.1.9
+PyJWT>=2.8.0

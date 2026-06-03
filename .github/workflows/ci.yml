@@ -73,8 +73,8 @@ jobs:
       - name: Ruff format check
         run: ruff format --check app tests scripts
 
-      - name: Mypy (guardrails + circuit breaker; 全量 app 待技术债清理后启用)
-        run: mypy app/core/guardrails app/infrastructure/llm/circuit_breaker.py
+      - name: Mypy (guardrails + auth + circuit breaker)
+        run: mypy app/core/guardrails app/api/auth.py app/api/context.py app/infrastructure/llm/circuit_breaker.py
 
       - name: Pytest
         run: pytest tests/ -v --tb=short -q

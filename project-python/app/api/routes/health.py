@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.rate_limit import limiter
 from app.config import get_settings
 from app.infrastructure.database.session import get_async_session
 
@@ -17,13 +18,16 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
+@limiter.exempt
+async def health(request: Request) -> dict[str, str]:
     """轻量存活探针（不访问外部依赖）。"""
     return {"status": "ok"}
 
 
 @router.get("/health/ready")
+@limiter.exempt
 async def health_ready(
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, Any]:
     """就绪探针：检查数据库连通性。"""

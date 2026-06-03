@@ -11,7 +11,7 @@
 - [x] S0.1 新增安全 `langfuse_exporter`（默认关闭=no-op）+ Langfuse 配置。验证：`import app.main` 成功（实测通过）。
 - [x] S0.2 引入 Alembic + 初始迁移。验证：对真实 PostgreSQL 16 实测 `upgrade head` 建 5 表、`downgrade base` 清空。
 - [x] S0.3 对齐 `ToolRegistry`/`MemoryManager` 与编排器协议。验证：单测 3 passed、ruff 干净。
-- [~] S0.4 配置补齐：Langfuse 已完成；embedding/向量库/鉴权/限流/超时预算随对应 Epic 增量补齐。
+- [x] S0.4 配置补齐：Langfuse、embedding/向量库、鉴权/限流/护栏/CORS 已写入 `config.py` 与 `.env.example`。
 
 ## Epic 1 — LangGraph + pgvector 打通四条主链路（P0）✅ 已完成
 - [x] S1.1 `VectorStore` 端口 + pgvector 实现 + 嵌入工厂。验证：真实 PG+pgvector 写入/检索 round-trip（RAG 文档 Top-1）。
@@ -29,10 +29,12 @@
 
 > 说明：全量 `mypy app` 尚有历史类型债（7 文件）；CI 当前门禁 `guardrails` + `circuit_breaker`，待后续专项清理后扩至全库。
 
-## Epic 3 — 安全与多租户（P1）
-- [ ] S3.1 API Key/JWT 鉴权 + 租户上下文贯穿。
-- [ ] S3.2 slowapi 限流 + CORS + 安全响应头 + 请求体校验。
-- [ ] S3.3 guardrails：提示注入检测 / PII 脱敏 / 输出安全（接链路 + span）。
+## Epic 3 — 安全与多租户（P1）✅ 已完成
+- [x] S3.1 API Key/JWT 鉴权 + 租户上下文贯穿。验证：`X-API-Key` / Bearer JWT → `X-Tenant-Id`；LangGraph `thread_id` 为 `tenant:session`。
+- [x] S3.2 slowapi 限流 + CORS + 安全响应头 + Content-Length 请求体上限 + Pydantic 字段长度。验证：`tests/test_s3_2_security.py`。
+- [x] S3.3 guardrails：输入/输出接入 `/chat` `/rag/query` `/agent`，Tracer `guardrails.*` span。验证：`tests/test_s3_3_guardrails_api.py`。
+
+> 说明：`AUTH_ENABLED=false`（默认）时匿名访问，便于本地/CI；生产设 `AUTH_ENABLED=true` 并配置 `API_KEYS` 或 `JWT_SECRET`。
 
 ## Epic 4 — 可观测性与韧性（P2）
 - [ ] S4.1 OTel GenAI 语义约定埋点（模型/工具/检索 span + token/cost）。

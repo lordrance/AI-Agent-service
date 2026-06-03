@@ -13,7 +13,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from loguru import logger
 from openai import AsyncOpenAI
 
+from app.api.context import build_thread_id
 from app.config import get_settings
+from app.core.guardrails.pipeline import guard_input_text, guard_output_text
 from app.core.intent.recognizer import IntentRecognizer
 from app.core.langgraph.graph import run_chat
 from app.infrastructure.trace.langfuse_exporter import export_trace
@@ -53,8 +55,20 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     trace_id = str(uuid.uuid4())
     span = _tracer.start_trace(trace_id, "chat")
 
+    settings = get_settings()
     try:
-        user_text = request.messages[-1].content if request.messages else ""
+        sanitized_messages = list(request.messages)
+        if settings.guardrails_enabled:
+            for msg in sanitized_messages:
+                if msg.role == "user":
+                    msg.content = guard_input_text(
+                        msg.content,
+                        tracer=_tracer,
+                        trace_id=trace_id,
+                        parent_span=span,
+                    )
+
+        user_text = sanitized_messages[-1].content if sanitized_messages else ""
         intent = await _intent.recognize(user_text)
         clarify = await _intent.clarify(user_text, intent)
         logger.info(
@@ -64,18 +78,27 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
             intent.sub_intent,
         )
 
-        lc_messages = _to_lc_messages(request)
+        req_for_lc = request.model_copy(update={"messages": sanitized_messages})
+        lc_messages = _to_lc_messages(req_for_lc)
         if clarify and intent.confidence < _intent.confidence_threshold:
             lc_messages.append(SystemMessage(content=f"（系统提示：{clarify}）"))
 
-        thread_id = request.conversation_id or str(uuid.uuid4())
+        thread_id = build_thread_id(request.conversation_id or str(uuid.uuid4()))
         content = await run_chat(graph, thread_id, lc_messages)
+
+        if settings.guardrails_enabled:
+            content = guard_output_text(
+                content,
+                tracer=_tracer,
+                trace_id=trace_id,
+                parent_span=span,
+            )
 
         _tracer.end_span(span, result={"thread_id": thread_id})
 
         response = ChatResponse(
             id=str(uuid.uuid4()),
-            model=request.model or get_settings().openai_model,
+            model=request.model or settings.openai_model,
             content=content,
             trace_id=trace_id,
             usage=None,

@@ -82,6 +82,42 @@ class Settings(BaseSettings):
     langfuse_public_key: str = Field(default="", description="Langfuse Public Key")
     langfuse_secret_key: str = Field(default="", description="Langfuse Secret Key")
 
+    # Epic 3 — 鉴权与多租户
+    auth_enabled: bool = Field(
+        default=False,
+        description="是否启用 API Key / JWT 鉴权（未启用时租户为 anonymous）",
+    )
+    api_keys: str = Field(
+        default="",
+        description="API Key 映射：tenant:secret 或 secret（默认租户 default），逗号分隔",
+    )
+    jwt_secret: str = Field(default="", description="JWT HS256 签名密钥")
+    jwt_algorithm: str = Field(default="HS256", description="JWT 算法")
+    jwt_audience: str = Field(default="", description="JWT aud 校验（空则跳过）")
+
+    # 限流、CORS、请求边界
+    rate_limit_enabled: bool = Field(default=True, description="是否启用 slowapi 限流")
+    rate_limit_default: str = Field(default="60/minute", description="默认限流规则")
+    rate_limit_storage_uri: str = Field(
+        default="",
+        description="slowapi 存储 URI（空=进程内存；生产可设 redis://）",
+    )
+    cors_origins: str = Field(
+        default="*",
+        description="CORS 允许来源，逗号分隔；* 表示全部",
+    )
+    max_request_body_bytes: int = Field(
+        default=10_485_760,
+        description="请求体最大字节（Content-Length）",
+    )
+    max_text_field_length: int = Field(
+        default=32_000,
+        description="单条文本字段最大字符（消息/查询等）",
+    )
+
+    # 护栏
+    guardrails_enabled: bool = Field(default=True, description="是否在 API 链路启用护栏")
+
 
 @lru_cache
 def get_settings() -> Settings:

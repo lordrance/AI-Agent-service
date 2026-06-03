@@ -11,14 +11,18 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
+from app.api.context import build_thread_id
 from app.config import get_settings
 from app.core.agent.react_agent import ReActAgent
+from app.core.guardrails.pipeline import guard_input_text, guard_output_text
 from app.core.tools.builtin import CalculatorTool, WebSearchTool
 from app.core.tools.registry import ToolRegistry
 from app.infrastructure.llm.model_router import ModelConfig, ModelRouter
+from app.infrastructure.trace.tracer import Tracer
 from app.models.schemas import AgentRequest, AgentResponse
 
 router = APIRouter(tags=["agent"])
+_tracer = Tracer()
 
 
 class _ReactLLM:
@@ -63,8 +67,18 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
     llm = _build_llm()
     registry = _build_registry()
     max_steps = request.max_steps or settings.agent_max_steps
-    session_id = request.session_id or str(uuid.uuid4())
+    session_id = build_thread_id(request.session_id or str(uuid.uuid4()))
     trace_id = str(uuid.uuid4())
+    span = _tracer.start_trace(trace_id, "agent")
+
+    user_input = request.input
+    if settings.guardrails_enabled:
+        user_input = guard_input_text(
+            user_input,
+            tracer=_tracer,
+            trace_id=trace_id,
+            parent_span=span,
+        )
 
     agent = ReActAgent(
         llm=llm,
@@ -77,19 +91,35 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
 
     try:
         result = await asyncio.wait_for(
-            agent.run(request.input, ctx),
+            agent.run(user_input, ctx),
             timeout=settings.agent_timeout_seconds,
         )
     except TimeoutError as exc:
         logger.warning("Agent 运行超时 session={}", session_id)
+        _tracer.end_span(span, error="timeout")
         raise HTTPException(status_code=504, detail="Agent 运行超时") from exc
+    except HTTPException:
+        _tracer.end_span(span, error="guardrail")
+        raise
     except Exception as exc:
         logger.exception("Agent 运行失败: {}", exc)
+        _tracer.end_span(span, error=str(exc))
         raise HTTPException(status_code=500, detail=f"Agent 运行失败: {exc!s}") from exc
+
+    answer = result.final_answer
+    if settings.guardrails_enabled and answer:
+        answer = guard_output_text(
+            answer,
+            tracer=_tracer,
+            trace_id=trace_id,
+            parent_span=span,
+        )
+
+    _tracer.end_span(span, result={"success": result.success, "steps": len(result.steps)})
 
     return AgentResponse(
         success=result.success,
-        answer=result.final_answer,
+        answer=answer,
         steps=len(result.steps),
         error=result.error,
         trace_id=trace_id,
