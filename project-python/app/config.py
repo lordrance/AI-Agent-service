@@ -44,6 +44,23 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", description="日志级别")
 
+    # 嵌入与向量库（Epic 1）
+    embedding_backend: str = Field(
+        default="hash",
+        description="嵌入后端：hash（本地确定性，无需密钥/可离线）| openai（调用嵌入 API）",
+    )
+    embedding_model: str = Field(
+        default="text-embedding-3-small",
+        description="openai 后端使用的嵌入模型名",
+    )
+    embedding_dim: int = Field(
+        default=1536,
+        description="嵌入维度（须与向量库迁移中的 vector(dim) 一致；改动需新迁移）",
+    )
+    vector_store: str = Field(default="pgvector", description="向量库实现：pgvector | pinecone")
+    vector_table: str = Field(default="knowledge_vectors", description="pgvector 表名")
+    vector_metric: str = Field(default="cosine", description="相似度度量：cosine | l2 | ip")
+
     langfuse_enabled: bool = Field(default=False, description="是否启用 Langfuse 追踪导出")
     langfuse_host: str = Field(
         default="https://cloud.langfuse.com",

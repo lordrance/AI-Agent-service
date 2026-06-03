@@ -37,6 +37,7 @@ dependencies = [
     "openai>=1.60.0",
     "numpy>=2.0.0",
     "alembic>=1.13.0",
+    "pgvector>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,8 @@ extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+# 全仓库沿用 `# -*- coding: utf-8 -*-` 头，保留既有风格，避免无关改动
+ignore = ["UP009"]
 
 [tool.mypy]
 python_version = "3.11"
