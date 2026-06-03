@@ -21,6 +21,10 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+*.egg-info/
+
+# Python app runtime
+project-python/uploads/
 
 # Playwright artifacts
 playwright-report/
