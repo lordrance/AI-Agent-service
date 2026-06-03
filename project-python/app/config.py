@@ -141,6 +141,18 @@ class Settings(BaseSettings):
     def fallback_model_list(self) -> list[str]:
         return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]
 
+    # Epic 5 — 生产部署
+    run_migrations_on_startup: bool = Field(
+        default=True,
+        description="容器启动时是否执行 alembic upgrade head",
+    )
+    gunicorn_workers: int | None = Field(
+        default=None,
+        description="Gunicorn worker 数（None 时由 gunicorn_conf 按 CPU 计算）",
+    )
+    gunicorn_graceful_timeout: int = Field(default=30, description="Gunicorn 优雅停机等待（秒）")
+    gunicorn_timeout: int = Field(default=120, description="Gunicorn worker 请求超时（秒）")
+
 
 @lru_cache
 def get_settings() -> Settings:

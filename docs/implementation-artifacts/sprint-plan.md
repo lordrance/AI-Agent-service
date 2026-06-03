@@ -42,7 +42,7 @@
 - [x] S4.3 Prometheus `/api/v1/metrics` + HTTP/LLM/工具指标；`/health/ready` 检查 DB/Redis/pgvector。验证：`tests/test_s4_3_observability.py`。
 - [x] S4.4 `ModelRouter`：tenacity 重试、调用超时、max_tokens 上限、`LLM_FALLBACK_MODELS` 降级链。验证：`tests/test_s4_4_resilience.py`。
 
-## Epic 5 — 部署与扩展（P3）
-- [ ] S5.1 生产 Dockerfile（多阶段/非 root/healthcheck）+ gunicorn 多 worker + 优雅停机。
-- [ ] S5.2 compose/k8s 样例 + 连接池/PgBouncer 说明 + 配置/密钥管理。
-- [ ] S5.3 基础负载冒烟 + 部署文档（扩缩容/回滚/迁移策略）。
+## Epic 5 — 部署与扩展（P3）✅ 已完成
+- [x] S5.1 多阶段 Dockerfile + 非 root + HEALTHCHECK + gunicorn/UvicornWorker + entrypoint 迁移。验证：`docker build`（CI）+ `tests/test_s5_deploy.py`。
+- [x] S5.2 `docker-compose.yml`（pgvector+Redis）+ `deploy/kubernetes/*` + `docs/deployment.md`（PgBouncer/密钥）。
+- [x] S5.3 `scripts/smoke_deploy.sh` + 部署文档（扩缩容/回滚/迁移）。验证：脚本结构测试 + 文档齐备。

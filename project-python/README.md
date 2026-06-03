@@ -62,17 +62,18 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 5. 访问健康检查：<http://127.0.0.1:8000/api/v1/health>
 
-### Docker Compose
+### Docker Compose（生产对齐栈）
 
-在项目根目录准备 `.env`（可由 `.env.example` 复制），然后：
+在 `project-python` 目录准备 `.env`（可由 `.env.example` 复制），然后：
 
 ```bash
 docker compose up -d --build
+./scripts/smoke_deploy.sh http://127.0.0.1:8000
 ```
 
-Compose 包含 **app、postgres、redis、milvus**，以及 Milvus 官方 Standalone 模式所需的 **etcd、minio**（向量与元数据存储依赖，非业务微服务）。应用默认映射 `8000` 端口。
+Compose 包含 **app（gunicorn）**、**PostgreSQL 16 + pgvector**、**Redis**。向量检索走 pgvector，与主链路一致。
 
-首次启动 Milvus 可能需要数十秒就绪；若应用启动过快导致连不上 Milvus，可在生产环境中为 app 增加重试或 `depends_on` 健康检查策略。
+完整生产部署说明见 **[docs/deployment.md](./docs/deployment.md)**（K8s 样例、PgBouncer、扩缩容与回滚）。
 
 
 ```bash
