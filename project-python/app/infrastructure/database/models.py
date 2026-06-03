@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -43,7 +43,7 @@ class Conversation(Base):
         onupdate=datetime.utcnow,
     )
 
-    messages: Mapped[list["Message"]] = relationship(
+    messages: Mapped[list[Message]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
     )
@@ -73,7 +73,7 @@ class Message(Base):
         default=datetime.utcnow,
     )
 
-    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
 
 class Document(Base):
@@ -86,6 +86,7 @@ class Document(Base):
         primary_key=True,
         default=_uuid,
     )
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="anonymous")
     filename: Mapped[str] = mapped_column(String(1024))
     mime_type: Mapped[str | None] = mapped_column(String(256), nullable=True)
     storage_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -96,7 +97,7 @@ class Document(Base):
         default=datetime.utcnow,
     )
 
-    chunks: Mapped[list["DocumentChunk"]] = relationship(
+    chunks: Mapped[list[DocumentChunk]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
     )
@@ -126,7 +127,7 @@ class DocumentChunk(Base):
         default=datetime.utcnow,
     )
 
-    document: Mapped["Document"] = relationship(back_populates="chunks")
+    document: Mapped[Document] = relationship(back_populates="chunks")
 
 
 class TraceLog(Base):

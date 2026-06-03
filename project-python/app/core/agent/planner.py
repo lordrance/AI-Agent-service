@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Sequence
+from typing import Any
 
 from app.core.agent.react_agent import AgentResult, LLMCallable, MemoryLike, ToolInvoker
 
@@ -60,19 +61,19 @@ class SubTask:
     title: str
     description: str
     action_type: str  # "tool" | "reasoning"
-    tool_name: Optional[str] = None
-    tool_args_hint: Optional[str] = None
+    tool_name: str | None = None
+    tool_args_hint: str | None = None
 
 
 @dataclass
 class PlanExecuteState:
     """执行过程中的累积状态（便于重规划与追踪）。"""
 
-    plan: List[SubTask] = field(default_factory=list)
-    results: List[Dict[str, Any]] = field(default_factory=list)
+    plan: list[SubTask] = field(default_factory=list)
+    results: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
+def _extract_json_object(text: str) -> dict[str, Any]:
     """从模型输出中提取 JSON 对象。"""
     text = text.strip()
     try:
@@ -85,9 +86,9 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     return json.loads(m.group(0))
 
 
-def _parse_subtasks(data: Dict[str, Any]) -> List[SubTask]:
+def _parse_subtasks(data: dict[str, Any]) -> list[SubTask]:
     raw_list = data.get("subtasks") or []
-    out: List[SubTask] = []
+    out: list[SubTask] = []
     for item in raw_list:
         if not isinstance(item, dict):
             continue
@@ -111,7 +112,7 @@ class PlannerAgent:
         self,
         llm: LLMCallable,
         tools: ToolInvoker,
-        memory: Optional[MemoryLike],
+        memory: MemoryLike | None,
         max_replan_attempts: int = 2,
     ) -> None:
         self._llm = llm
@@ -119,9 +120,9 @@ class PlannerAgent:
         self._memory = memory
         self.max_replan_attempts = max(0, max_replan_attempts)
 
-    async def plan(self, query: str) -> List[SubTask]:
+    async def plan(self, query: str) -> list[SubTask]:
         """根据用户目标生成子任务列表。"""
-        messages: Sequence[Dict[str, str]] = [
+        messages: Sequence[dict[str, str]] = [
             {"role": "system", "content": PLAN_SYSTEM_PROMPT},
             {"role": "user", "content": f"用户目标：\n{query}\n\n请输出 JSON 计划。"},
         ]
@@ -129,7 +130,7 @@ class PlannerAgent:
             raw = await self._llm.acomplete(messages, temperature=0.3)
             data = _extract_json_object(raw)
             return _parse_subtasks(data)
-        except Exception as e:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             logger.exception("生成计划失败")
             # 降级：单步推理任务
             return [
@@ -143,21 +144,21 @@ class PlannerAgent:
 
     async def execute(
         self,
-        plan: List[SubTask],
+        plan: list[SubTask],
         query: str,
         session_id: str,
-        tool_names: Optional[Sequence[str]] = None,
-        trace_callback: Optional[Any] = None,
+        tool_names: Sequence[str] | None = None,
+        trace_callback: Any | None = None,
     ) -> AgentResult:
         """
         按顺序执行子任务；tool 类型调用工具，reasoning 类型用 LLM 综合上下文。
         """
         allowed = set(tool_names) if tool_names else None
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         state = PlanExecuteState(plan=list(plan), results=[])
 
         for idx, task in enumerate(plan):
-            rec: Dict[str, Any] = {
+            rec: dict[str, Any] = {
                 "subtask_id": task.id,
                 "title": task.title,
                 "action_type": task.action_type,
@@ -174,14 +175,20 @@ class PlannerAgent:
                 else:
                     # 推理子任务：用 LLM 汇总已有结果
                     ctx = json.dumps(results, ensure_ascii=False, indent=2)[:12000]
-                    msgs: Sequence[Dict[str, str]] = [
+                    msgs: Sequence[dict[str, str]] = [
                         {
                             "role": "system",
-                            "content": "你是执行专家。根据已有子任务结果，完成当前子任务描述，输出简洁结论。",
+                            "content": (
+                                "你是执行专家。根据已有子任务结果，"
+                                "完成当前子任务描述，输出简洁结论。"
+                            ),
                         },
                         {
                             "role": "user",
-                            "content": f"原始问题：{query}\n当前子任务：{task.title}\n详情：{task.description}\n已有结果：\n{ctx}",
+                            "content": (
+                                f"原始问题：{query}\n当前子任务：{task.title}\n"
+                                f"详情：{task.description}\n已有结果：\n{ctx}"
+                            ),
                         },
                     ]
                     text = await self._llm.acomplete(msgs, temperature=0.3)
@@ -209,14 +216,17 @@ class PlannerAgent:
 
         # 最终汇总答案
         try:
-            summary_msgs: Sequence[Dict[str, str]] = [
+            summary_msgs: Sequence[dict[str, str]] = [
                 {
                     "role": "system",
                     "content": "你是总结助手。根据子任务执行记录，给出面向用户的完整最终答案。",
                 },
                 {
                     "role": "user",
-                    "content": f"问题：{query}\n执行记录：\n{json.dumps(results, ensure_ascii=False, indent=2)[:14000]}",
+                    "content": (
+                        f"问题：{query}\n执行记录：\n"
+                        f"{json.dumps(results, ensure_ascii=False, indent=2)[:14000]}"
+                    ),
                 },
             ]
             final = await self._llm.acomplete(summary_msgs, temperature=0.2)
@@ -244,17 +254,17 @@ class PlannerAgent:
 
     async def replan(
         self,
-        plan: List[SubTask],
-        results: List[Dict[str, Any]],
-        error: Optional[str],
-    ) -> List[SubTask]:
+        plan: list[SubTask],
+        results: list[dict[str, Any]],
+        error: str | None,
+    ) -> list[SubTask]:
         """根据执行结果与错误重新生成子任务列表。"""
         payload = {
             "previous_plan": [task.__dict__ for task in plan],
             "results_so_far": results,
             "error": error,
         }
-        messages: Sequence[Dict[str, str]] = [
+        messages: Sequence[dict[str, str]] = [
             {"role": "system", "content": REPLAN_SYSTEM_PROMPT},
             {
                 "role": "user",
@@ -267,7 +277,7 @@ class PlannerAgent:
             raw = await self._llm.acomplete(messages, temperature=0.3)
             data = _extract_json_object(raw)
             return _parse_subtasks(data)
-        except Exception as e:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             logger.exception("重规划失败")
             return [
                 SubTask(
@@ -282,15 +292,15 @@ class PlannerAgent:
         self,
         query: str,
         session_id: str,
-        tool_names: Optional[Sequence[str]] = None,
-        trace_callback: Optional[Any] = None,
+        tool_names: Sequence[str] | None = None,
+        trace_callback: Any | None = None,
     ) -> AgentResult:
         """
         高层封装：计划 → 执行；失败则重规划并最多重试 max_replan_attempts 次。
         """
         current_plan = await self.plan(query)
-        last_error: Optional[str] = None
-        aggregate_results: List[Dict[str, Any]] = []
+        last_error: str | None = None
+        aggregate_results: list[dict[str, Any]] = []
 
         for attempt in range(self.max_replan_attempts + 1):
             res = await self.execute(
@@ -318,7 +328,11 @@ class PlannerAgent:
                 )
             if trace_callback:
                 await trace_callback(
-                    {"phase": "replan", "attempt": attempt + 1, "new_plan": [t.id for t in current_plan]}
+                    {
+                        "phase": "replan",
+                        "attempt": attempt + 1,
+                        "new_plan": [t.id for t in current_plan],
+                    }
                 )
 
         return AgentResult(

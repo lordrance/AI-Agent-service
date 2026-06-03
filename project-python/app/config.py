@@ -44,6 +44,139 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", description="日志级别")
 
+    # 嵌入与向量库（Epic 1）
+    embedding_backend: str = Field(
+        default="hash",
+        description="嵌入后端：hash（本地确定性，无需密钥/可离线）| openai（调用嵌入 API）",
+    )
+    embedding_model: str = Field(
+        default="text-embedding-3-small",
+        description="openai 后端使用的嵌入模型名",
+    )
+    embedding_dim: int = Field(
+        default=1536,
+        description="嵌入维度（须与向量库迁移中的 vector(dim) 一致；改动需新迁移）",
+    )
+    vector_store: str = Field(
+        default="pgvector",
+        description="向量库实现：pgvector（本地/CI）| pinecone（生产推荐）",
+    )
+    vector_table: str = Field(default="knowledge_vectors", description="pgvector 表名")
+    vector_metric: str = Field(default="cosine", description="相似度度量：cosine | l2 | ip")
+
+    pinecone_api_key: str = Field(default="", description="Pinecone API Key")
+    pinecone_index: str = Field(default="agent-knowledge", description="Pinecone 索引名")
+    pinecone_host: str = Field(
+        default="",
+        description="Pinecone Serverless 区域 host（控制台提供，Pod 模式可留空）",
+    )
+
+    rag_hybrid_enabled: bool = Field(default=True, description="RAG 是否启用向量+BM25+RRF")
+    rag_bm25_max_docs_per_tenant: int = Field(
+        default=10_000,
+        description="每租户 BM25 索引最大分块数",
+    )
+    chat_stream_buffer_max_chars: int = Field(
+        default=8000,
+        description="流式输出护栏校验前的最大累积字符",
+    )
+
+    agent_max_steps: int = Field(default=8, description="ReAct Agent 最大步数（递归上限）")
+    agent_timeout_seconds: float = Field(default=60.0, description="Agent 单次运行总超时（秒）")
+
+    rag_top_k: int = Field(default=5, description="RAG 检索返回的上下文数量")
+    rerank_enabled: bool = Field(
+        default=False,
+        description="是否启用 Cross-Encoder 重排（需 sentence-transformers）",
+    )
+    reranker_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description="重排模型名",
+    )
+
+    langfuse_enabled: bool = Field(default=False, description="是否启用 Langfuse 追踪导出")
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse Host",
+    )
+    langfuse_public_key: str = Field(default="", description="Langfuse Public Key")
+    langfuse_secret_key: str = Field(default="", description="Langfuse Secret Key")
+
+    # Epic 3 — 鉴权与多租户
+    auth_enabled: bool = Field(
+        default=False,
+        description="是否启用 API Key / JWT 鉴权（未启用时租户为 anonymous）",
+    )
+    api_keys: str = Field(
+        default="",
+        description="API Key 映射：tenant:secret 或 secret（默认租户 default），逗号分隔",
+    )
+    jwt_secret: str = Field(default="", description="JWT HS256 签名密钥")
+    jwt_algorithm: str = Field(default="HS256", description="JWT 算法")
+    jwt_audience: str = Field(default="", description="JWT aud 校验（空则跳过）")
+
+    # 限流、CORS、请求边界
+    rate_limit_enabled: bool = Field(default=True, description="是否启用 slowapi 限流")
+    rate_limit_default: str = Field(default="60/minute", description="默认限流规则")
+    rate_limit_storage_uri: str = Field(
+        default="",
+        description="slowapi 存储 URI（空=进程内存；生产可设 redis://）",
+    )
+    cors_origins: str = Field(
+        default="*",
+        description="CORS 允许来源，逗号分隔；* 表示全部",
+    )
+    max_request_body_bytes: int = Field(
+        default=10_485_760,
+        description="请求体最大字节（Content-Length）",
+    )
+    max_text_field_length: int = Field(
+        default=32_000,
+        description="单条文本字段最大字符（消息/查询等）",
+    )
+
+    # 护栏
+    guardrails_enabled: bool = Field(default=True, description="是否在 API 链路启用护栏")
+
+    # Epic 4 — 可观测性与韧性
+    otel_enabled: bool = Field(default=False, description="是否启用 OpenTelemetry GenAI span")
+    otel_service_name: str = Field(default="enterprise-ai-agent", description="OTel 服务名")
+    otel_exporter_otlp_endpoint: str = Field(
+        default="",
+        description="OTLP 导出地址（HTTP 或 gRPC，如 http://localhost:4318/v1/traces）",
+    )
+    prometheus_enabled: bool = Field(default=True, description="是否暴露 /metrics")
+    llm_timeout_seconds: float = Field(default=60.0, description="单次 LLM HTTP 调用超时（秒）")
+    llm_max_tokens_per_request: int | None = Field(
+        default=4096,
+        description="单次请求 max_tokens 上限（None 表示不限制）",
+    )
+    llm_retry_max_attempts: int = Field(default=3, description="可重试错误的最大尝试次数")
+    llm_fallback_models: str = Field(
+        default="",
+        description="降级模型列表（逗号分隔），优先级低于 OPENAI_MODEL",
+    )
+    circuit_breaker_failure_threshold: int = Field(default=5, description="熔断失败阈值")
+    circuit_breaker_recovery_timeout: float = Field(
+        default=60.0,
+        description="熔断恢复等待（秒）",
+    )
+
+    def fallback_model_list(self) -> list[str]:
+        return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]
+
+    # Epic 5 — 生产部署
+    run_migrations_on_startup: bool = Field(
+        default=True,
+        description="容器启动时是否执行 alembic upgrade head",
+    )
+    gunicorn_workers: int | None = Field(
+        default=None,
+        description="Gunicorn worker 数（None 时由 gunicorn_conf 按 CPU 计算）",
+    )
+    gunicorn_graceful_timeout: int = Field(default=30, description="Gunicorn 优雅停机等待（秒）")
+    gunicorn_timeout: int = Field(default=120, description="Gunicorn worker 请求超时（秒）")
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -17,8 +17,7 @@ from app.models.schemas import Message
 class CompressLLMProtocol(Protocol):
     """用于摘要压缩的 LLM。"""
 
-    async def ainvoke(self, input: Any, **kwargs: Any) -> Any:
-        ...
+    async def ainvoke(self, input: Any, **kwargs: Any) -> Any: ...
 
 
 class ShortTermMemory:
@@ -144,15 +143,17 @@ class ShortTermMemory:
             logger.exception("压缩重写 Redis 列表失败: {}", e)
             raise RuntimeError(f"记忆压缩失败: {e}") from e
 
-        logger.info("会话 {} 已压缩，摘要 {} 条历史，保留 {} 条", session_id, len(to_summarize), len(tail))
+        logger.info(
+            "会话 {} 已压缩，摘要 {} 条历史，保留 {} 条",
+            session_id,
+            len(to_summarize),
+            len(tail),
+        )
 
     async def _summarize_messages(self, messages: list[Message]) -> str:
         """调用 LLM 生成摘要。"""
         lines = [f"{m.role.value}: {m.content}" for m in messages]
-        prompt = (
-            "请将以下对话压缩为简洁中文摘要，保留关键事实与用户意图：\n\n"
-            + "\n".join(lines)
-        )
+        prompt = "请将以下对话压缩为简洁中文摘要，保留关键事实与用户意图：\n\n" + "\n".join(lines)
         if not isinstance(self._llm, CompressLLMProtocol) and not callable(
             getattr(self._llm, "ainvoke", None)
         ):

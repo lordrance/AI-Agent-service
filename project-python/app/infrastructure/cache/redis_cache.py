@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -53,7 +53,8 @@ class RedisCache:
     ) -> None:
         """
         :param url: Redis 连接 URL
-        :param semantic_embedder: 可选，具备 encode(texts)->np.ndarray 的编码器（如 SentenceTransformer）
+        :param semantic_embedder: 可选，具备 encode(texts)->np.ndarray 的编码器
+            （如 SentenceTransformer）
         :param max_semantic_scan: 语义匹配时最多扫描的缓存条目数
         """
         if aioredis is None:
@@ -64,7 +65,7 @@ class RedisCache:
         self._max_semantic_scan = max(1, max_semantic_scan)
         self._embed_lock = asyncio.Lock()
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """按键获取字符串值。"""
         try:
             val = await self._client.get(key)
@@ -122,7 +123,7 @@ class RedisCache:
             return 0.0
         return float(np.dot(a, b) / denom)
 
-    async def semantic_get(self, query: str, threshold: float = 0.95) -> Optional[str]:
+    async def semantic_get(self, query: str, threshold: float = 0.95) -> str | None:
         """语义缓存：在已存储条目中查找与查询向量余弦相似度 >= threshold 的结果。"""
         try:
             q_vec = await self._encode_query(query)
@@ -139,7 +140,7 @@ class RedisCache:
                 return None
 
             best_sim = -1.0
-            best_value: Optional[str] = None
+            best_value: str | None = None
             scanned = 0
 
             for eid in entry_ids:

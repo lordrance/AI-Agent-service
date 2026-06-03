@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from enum import Enum
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 
@@ -102,15 +103,11 @@ class CircuitBreaker:
                     self._half_open_attempts = 0
                     logger.info("熔断器 [{}] 进入 Half-Open 试探", self.name)
                 else:
-                    raise RuntimeError(
-                        f"熔断器 [{self.name}] 处于 OPEN 状态，拒绝调用"
-                    )
+                    raise RuntimeError(f"熔断器 [{self.name}] 处于 OPEN 状态，拒绝调用")
 
             if self._state == CircuitState.HALF_OPEN:
                 if self._half_open_attempts >= self.half_open_max:
-                    raise RuntimeError(
-                        f"熔断器 [{self.name}] Half-Open 试探次数已达上限"
-                    )
+                    raise RuntimeError(f"熔断器 [{self.name}] Half-Open 试探次数已达上限")
                 self._half_open_attempts += 1
 
         try:

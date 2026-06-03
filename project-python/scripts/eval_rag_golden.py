@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RAG 黄金集离线评估（美国 NG Eval 练习用）。
+RAG 黄金集离线评估。
 
 用法:
   python scripts/eval_rag_golden.py --dataset scripts/fixtures/golden_rag_sample.jsonl --dry-run
-  python scripts/eval_rag_golden.py --dataset scripts/fixtures/golden_rag_sample.jsonl
-  python scripts/eval_rag_golden.py --dataset scripts/fixtures/golden_rag_sample.jsonl --use-ragas
+  python scripts/eval_rag_golden.py --fail-under 0.8
+  python scripts/eval_rag_golden.py --mode stub
+  python scripts/eval_rag_golden.py --use-ragas
 
---dry-run 仅校验 JSONL 字段；默认用简单子串匹配模拟「生成答案」与 ground_truth 对比。
-接入真实 RAG 管道时，将 predict_answer() 替换为对 app.core.rag 的调用。
+默认 --mode pipeline：将黄金集 contexts 写入向量库，经真实 HybridRetriever + RagService 检索后评分。
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import re
 import sys
@@ -22,8 +23,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# 确保从 project-python 根目录可 import app
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 REQUIRED_FIELDS = {"id", "question", "contexts", "ground_truth"}
+EVAL_TENANT = "golden-eval"
 
 
 @dataclass
@@ -65,8 +71,24 @@ def load_jsonl(path: Path) -> list[GoldenCase]:
     return cases
 
 
+def normalize(text: str) -> str:
+    return re.sub(r"\s+", "", text.lower())
+
+
+def score_match(pred_text: str, gold: str) -> bool:
+    p, g = normalize(pred_text), normalize(gold)
+    if not g:
+        return False
+    if g in p or p in g:
+        return True
+    # 数字答案（如 7天 vs 7 日内）
+    nums = re.findall(r"\d+", g)
+    if nums and all(n in p for n in nums):
+        return True
+    return False
+
+
 def predict_answer_stub(case: GoldenCase) -> str:
-    """占位：用检索上下文拼接模拟 RAG 输出。替换为真实 generator 即可。"""
     if case.should_refuse:
         return "根据提供的文档，未提及该信息。"
     joined = " ".join(case.contexts)
@@ -75,13 +97,96 @@ def predict_answer_stub(case: GoldenCase) -> str:
     return joined[:80]
 
 
-def normalize(text: str) -> str:
-    return re.sub(r"\s+", "", text.lower())
+async def _build_pipeline(cases: list[GoldenCase]):
+    from app.config import get_settings
+    from app.core.rag.bm25_registry import TenantBm25Registry
+    from app.core.rag.hybrid_retriever import HybridRetriever
+    from app.core.rag.service import RagService
+    from app.infrastructure.embeddings import get_embedder
+    from app.infrastructure.vectordb.base import VectorRecord
+    from app.infrastructure.vectordb.factory import build_vector_store
+
+    settings = get_settings()
+    store = build_vector_store()
+    embedder = get_embedder()
+    reg = TenantBm25Registry()
+    chunk_ids: list[str] = []
+
+    records: list[VectorRecord] = []
+    bm25_map: dict[str, str] = {}
+    for case in cases:
+        for i, ctx in enumerate(case.contexts):
+            cid = f"{case.id}_c{i}"
+            chunk_ids.append(cid)
+            emb = embedder.embed_documents([ctx])[0]
+            records.append(
+                VectorRecord(
+                    id=cid,
+                    content=ctx,
+                    embedding=emb,
+                    document_id=case.id,
+                    metadata={"case_id": case.id},
+                )
+            )
+            bm25_map[cid] = ctx
+
+    if records:
+        await store.upsert(records, namespace=EVAL_TENANT)
+    reg.replace_tenant_corpus(EVAL_TENANT, bm25_map)
+
+    hybrid = HybridRetriever(store, embedder, reg) if settings.rag_hybrid_enabled else None
+    svc = RagService(
+        vector_store=store,
+        embedder=embedder,
+        generator=None,
+        hybrid=hybrid,
+        tenant_id=EVAL_TENANT,
+    )
+    return store, chunk_ids, svc
 
 
-def score_exact(pred: str, gold: str) -> bool:
-    p, g = normalize(pred), normalize(gold)
-    return g in p or p in g
+async def predict_via_pipeline(case: GoldenCase, svc) -> str:
+    """用真实 RagService 检索，拼接 top 上下文作为「预测文本」供启发式打分。"""
+    hits = await svc.retrieve(case.question, top_k=5)
+    if not hits:
+        return ""
+    return "\n".join(h.content for h in hits if h.content)
+
+
+async def run_pipeline_eval(cases: list[GoldenCase]) -> dict[str, Any]:
+    store, chunk_ids, svc = await _build_pipeline(cases)
+    hits = 0
+    details: list[dict[str, Any]] = []
+    try:
+        for c in cases:
+            pred = await predict_via_pipeline(c, svc)
+            if c.should_refuse:
+                ok = score_match(pred, c.ground_truth) or "未提及" in pred or "工单" in pred
+            else:
+                ok = score_match(pred, c.ground_truth)
+            hits += int(ok)
+            details.append(
+                {
+                    "id": c.id,
+                    "question": c.question,
+                    "predicted_excerpt": pred[:200],
+                    "ground_truth": c.ground_truth,
+                    "pass": ok,
+                }
+            )
+    finally:
+        if chunk_ids:
+            await store.delete(chunk_ids, namespace=EVAL_TENANT)
+        await store.close()
+
+    n = len(cases) or 1
+    return {
+        "mode": "rag_pipeline_retrieval",
+        "total": len(cases),
+        "pass": hits,
+        "accuracy": round(hits / n, 4),
+        "details": details,
+    }
 
 
 def run_heuristic_eval(cases: list[GoldenCase]) -> dict[str, Any]:
@@ -89,7 +194,7 @@ def run_heuristic_eval(cases: list[GoldenCase]) -> dict[str, Any]:
     details: list[dict[str, Any]] = []
     for c in cases:
         pred = predict_answer_stub(c)
-        ok = score_exact(pred, c.ground_truth)
+        ok = score_match(pred, c.ground_truth)
         hits += int(ok)
         details.append(
             {
@@ -116,9 +221,7 @@ def run_ragas_eval(cases: list[GoldenCase]) -> dict[str, Any]:
         from ragas import evaluate
         from ragas.metrics import answer_relevancy, context_precision, faithfulness
     except ImportError as e:
-        raise SystemExit(
-            "RAGAS 未安装。请执行: pip install -r requirements-eval.txt"
-        ) from e
+        raise SystemExit("RAGAS 未安装。请执行: pip install -r requirements-eval.txt") from e
 
     preds = [predict_answer_stub(c) for c in cases]
     data = {
@@ -141,24 +244,16 @@ def main() -> int:
         "--dataset",
         type=Path,
         default=Path("scripts/fixtures/golden_rag_sample.jsonl"),
-        help="JSONL 黄金集路径",
     )
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--use-ragas", action="store_true")
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="仅校验数据集格式，不跑评分",
+        "--mode",
+        choices=("pipeline", "stub"),
+        default="pipeline",
+        help="pipeline=真实 RagService 检索；stub=子串占位",
     )
-    parser.add_argument(
-        "--use-ragas",
-        action="store_true",
-        help="使用 RAGAS（需安装 requirements-eval.txt）",
-    )
-    parser.add_argument(
-        "--fail-under",
-        type=float,
-        default=None,
-        help="准确率低于该阈值时退出码为 1（CI 门禁用，如 0.8）",
-    )
+    parser.add_argument("--fail-under", type=float, default=None)
     args = parser.parse_args()
 
     if not args.dataset.is_file():
@@ -174,13 +269,16 @@ def main() -> int:
 
     if args.use_ragas:
         report = run_ragas_eval(cases)
+    elif args.mode == "pipeline":
+        report = asyncio.run(run_pipeline_eval(cases))
     else:
         report = run_heuristic_eval(cases)
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
-    if args.fail_under is not None and report.get("mode") == "heuristic_substring":
-        acc = report.get("accuracy", 0.0)
+    acc_modes = ("heuristic_substring", "rag_pipeline_retrieval")
+    if args.fail_under is not None and report.get("mode") in acc_modes:
+        acc = float(report.get("accuracy", 0.0))
         if acc < args.fail_under:
             print(
                 f"未达门禁: accuracy={acc} < fail_under={args.fail_under}",

@@ -19,8 +19,7 @@ from app.models.schemas import RetrievalResult
 class EmbeddingProtocol(Protocol):
     """与 LangChain Embeddings 兼容的嵌入接口。"""
 
-    def embed_query(self, text: str) -> list[float]:
-        ...
+    def embed_query(self, text: str) -> list[float]: ...
 
 
 @runtime_checkable
@@ -35,13 +34,24 @@ class MilvusSearchable(Protocol):
         limit: int,
         output_fields: list[str] | None = None,
         **kwargs: Any,
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
 
 def _tokenize(text: str) -> list[str]:
-    """简单中英文分词：按非字母数字 Unicode 切分。"""
-    return [t.lower() for t in re.findall(r"[\w\u4e00-\u9fff]+", text) if t]
+    """中英文分词：拉丁词整词保留；中文按字 + 二字片段，便于 BM25 重叠匹配。"""
+    tokens: list[str] = []
+    for part in re.findall(r"[\w\u4e00-\u9fff]+", text):
+        part = part.lower()
+        if not part:
+            continue
+        if re.search(r"[\u4e00-\u9fff]", part):
+            chars = [c for c in part if c.isalnum() or "\u4e00" <= c <= "\u9fff"]
+            tokens.extend(chars)
+            for i in range(len(chars) - 1):
+                tokens.append(chars[i] + chars[i + 1])
+        else:
+            tokens.append(part)
+    return tokens
 
 
 class _BM25Index:
@@ -237,6 +247,7 @@ class MultiRetriever:
 
     async def keyword_search(self, query: str, top_k: int) -> list[RetrievalResult]:
         """BM25 关键词检索（需先 register_keyword_documents）。"""
+
         def _run() -> list[RetrievalResult]:
             ranked = self._bm25.search(query, top_k)
             out: list[RetrievalResult] = []

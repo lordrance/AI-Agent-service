@@ -1,106 +1,170 @@
-# AI Agent 服务（Python 学习/面试骨架）
+# Enterprise AI Agent API
 
-## 项目简介
+**企业级 AI Agent 纯后端服务** —— 无前端 UI，通过 HTTP/JSON（及 SSE 流式）对外提供对话、RAG、文档入库与 ReAct Agent 能力。适合业务系统、移动 App 或运维脚本集成。
 
-本项目提供 **面向面试与自学的可运行骨架**：模块划分参考企业级 Agent 平台（Agent 编排、RAG、记忆、工具、ETL、模型路由与熔断、追踪），采用 **FastAPI** 提供 HTTP API。在 `app/core` 中预留 **Agent 编排**（ReAct、规划、反思）、**RAG**（检索、重排、生成）、**记忆系统**（短/长期）、**工具与意图识别** 等扩展点；在 `app/infrastructure` 中对接 **LLM 路由与熔断**、**Milvus**、**Redis**、**PostgreSQL** 与 **链路追踪**；在 `app/etl` 中承载文档解析、分块与入库流水线。
+[![CI](https://github.com/lordrance/AI-Agent-service/actions/workflows/ci.yml/badge.svg)](https://github.com/lordrance/AI-Agent-service/actions/workflows/ci.yml)
 
+---
 
+## 能做什么
 
-## 架构说明
+| 能力 | 端点 | 说明 |
+|------|------|------|
+| 多轮对话 | `POST /api/v1/chat` | LangGraph + Postgres 检查点，会话可恢复 |
+| 流式对话 | `POST /api/v1/chat/stream` | SSE，护栏与检查点与非流式一致 |
+| 文档入库 | `POST /api/v1/documents/upload` | PDF/TXT → 分块 → 向量 + 元数据 |
+| 文档管理 | `GET/DELETE /api/v1/documents` | 租户隔离列表与删除（含向量） |
+| RAG 问答 | `POST /api/v1/rag/query` | 向量 + BM25 + RRF 混合检索，可选 LLM 生成 |
+| Agent | `POST /api/v1/agent` | ReAct + 工具；`use_memory=true` 启用记忆 |
+| 运维 | `/api/v1/health`、`/metrics` | 就绪探针、Prometheus |
 
-- **接入层**：`app/main.py` 创建 FastAPI 应用，`app/api/routes/` 按领域拆分路由（对话、文档、健康检查）。
-- **领域核心**：`app/core/` 放置与框架无关的业务能力——Agent 图编排、RAG 管道、记忆策略、工具注册与意图识别。
-- **基础设施**：`app/infrastructure/` 封装对外部系统的访问（模型网关、向量库、缓存、关系库、可观测性），便于单测与替换实现。
-- **数据与 ETL**：`app/models` 定义 API/领域模型；`app/etl` 负责非结构化文档到向量索引的数据流。
-
-部署上可通过 **Dockerfile** 构建应用镜像，**docker-compose** 一键拉起应用与依赖中间件（详见下文 Compose 说明）。
+---
 
 ## 技术栈
 
-| 类别 | 技术 |
+| 类别 | 选型 |
 |------|------|
-| Web 框架 | FastAPI、Uvicorn |
-| Agent / LLM | LangChain、LangGraph、OpenAI 兼容 API |
-| 向量库 | Milvus（pymilvus） |
+| Web | FastAPI、Gunicorn、Uvicorn |
+| Agent | LangGraph、LangChain |
+| 向量库（生产） | **Pinecone**（namespace = 租户 ID） |
+| 向量库（本地/CI） | **pgvector**（PostgreSQL 扩展） |
+| 数据库 | PostgreSQL 16 |
 | 缓存 | Redis |
-| 关系库 | PostgreSQL、SQLAlchemy |
-| 配置与校验 | Pydantic v2、pydantic-settings |
-| 文档处理 | unstructured、pypdf、sentence-transformers |
-| 日志与韧性 | loguru、tenacity、httpx |
+| 鉴权 | API Key + JWT、slowapi 限流 |
+| 可观测 | Prometheus、Langfuse（可选）、OpenTelemetry（可选 OTLP） |
+
+> Milvus 已从主链路移除，代码仅保留并标记 **deprecated**。
+
+---
 
 ## 快速开始
 
-### 本地开发
+### 1. 环境要求
 
-1. Python 3.11+，创建虚拟环境并安装依赖：
+- Python **3.11+**
+- PostgreSQL 16（含 pgvector）与 Redis（本地或 Docker）
+
+### 2. 安装与配置
 
 ```bash
 cd project-python
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev]"
+cp .env.example .env
+# 编辑 .env：至少配置 DATABASE_URL、REDIS_URL
+# 使用对话/RAG 生成时需 OPENAI_API_KEY
 ```
 
-2. 复制环境变量并编辑（至少填写 `OPENAI_API_KEY` 等）：
+### 3. 数据库迁移
 
 ```bash
-cp .env.example .env
+alembic upgrade head
 ```
 
-3. 启动 API（需本机或 Compose 中已启动 Postgres / Redis / Milvus 若你要联调全栈）：
+### 4. 启动（开发）
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-4. 访问健康检查：<http://127.0.0.1:8000/api/v1/health>
+- 健康检查：<http://127.0.0.1:8000/api/v1/health>
+- OpenAPI 文档：<http://127.0.0.1:8000/docs>
 
-### Docker Compose
-
-在项目根目录准备 `.env`（可由 `.env.example` 复制），然后：
+### 5. Docker Compose（推荐联调）
 
 ```bash
 docker compose up -d --build
+./scripts/smoke_deploy.sh http://127.0.0.1:8000
 ```
 
-Compose 包含 **app、postgres、redis、milvus**，以及 Milvus 官方 Standalone 模式所需的 **etcd、minio**（向量与元数据存储依赖，非业务微服务）。应用默认映射 `8000` 端口。
+Compose 包含 **app + Postgres(pgvector) + Redis**。向量库默认 `VECTOR_STORE=pgvector`。
 
-首次启动 Milvus 可能需要数十秒就绪；若应用启动过快导致连不上 Milvus，可在生产环境中为 app 增加重试或 `depends_on` 健康检查策略。
+---
 
+## 生产：Pinecone
+
+```env
+VECTOR_STORE=pinecone
+PINECONE_API_KEY=你的密钥
+PINECONE_INDEX=agent-knowledge
+PINECONE_HOST=控制台中的 Serverless host
+EMBEDDING_DIM=1536
+```
+
+在 Pinecone 控制台创建 index，**维度须与 `EMBEDDING_DIM` 一致**。每个租户使用独立 **namespace**（与 `tenant_id` 对齐）。
+
+详见 [docs/deployment.md](./docs/deployment.md)。
+
+---
+
+## 鉴权示例
 
 ```bash
-# RAG 黄金集评估（可先 --dry-run 校验数据）
-pip install -r requirements-eval.txt
-python scripts/eval_rag_golden.py --dataset scripts/fixtures/golden_rag_sample.jsonl --dry-run
+# 未启用鉴权（默认开发）
+curl -s http://127.0.0.1:8000/api/v1/health
 
-# Langfuse：在 .env 中设置 LANGFUSE_ENABLED=true 与 keys，调用 /chat 后可在 Langfuse UI 查看 trace
+# 启用 AUTH_ENABLED=true 后
+export API_KEYS="tenant-a:secret-a"
+curl -s -H "X-API-Key: secret-a" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"你好"}]}' \
+  http://127.0.0.1:8000/api/v1/chat
 ```
 
-## 目录结构说明
+---
+
+## RAG 黄金集评估
+
+```bash
+# 校验数据集格式
+python scripts/eval_rag_golden.py --dry-run
+
+# 真实管道（写入 pgvector → 混合检索 → 打分）
+python scripts/eval_rag_golden.py --mode pipeline --fail-under 0.8
+```
+
+CI 对黄金集要求 **accuracy ≥ 0.8**（见 `.github/workflows/ci.yml`）。
+
+---
+
+## 测试
+
+```bash
+alembic upgrade head
+pytest tests/ -q
+ruff check app tests scripts
+```
+
+---
+
+## 目录结构
 
 ```
 project-python/
 ├── app/
-│   ├── main.py                 # FastAPI 入口
-│   ├── config.py               # 配置（pydantic-settings）
-│   ├── api/routes/             # 路由：chat、document、health
-│   ├── core/                   # Agent、RAG、记忆、工具、意图
-│   ├── infrastructure/         # LLM、向量库、缓存、DB、追踪
-│   ├── etl/                    # 解析、分块、流水线
-│   └── models/                 # schemas、enums
-├── requirements.txt
-├── requirements-eval.txt      # 可选：RAGAS、Langfuse
-├── scripts/
-│   ├── eval_rag_golden.py
-│   └── fixtures/golden_rag_sample.jsonl
-├── pyproject.toml
-├── Dockerfile
+│   ├── main.py              # FastAPI 入口
+│   ├── api/routes/          # chat、document、rag、agent、health
+│   ├── core/                # Agent、RAG、记忆、护栏、LangGraph
+│   └── infrastructure/      # LLM 路由、Pinecone/pgvector、DB、OTel
+├── alembic/                 # 数据库迁移
+├── scripts/                 # 评估脚本、冒烟测试
+├── tests/                   # pytest（60+ 用例）
 ├── docker-compose.yml
-├── .env.example
-└── README.md
+└── docs/deployment.md
 ```
+
+---
+
+## 相关文档
+
+- [部署指南](./docs/deployment.md)
+- [API 示例](./docs/api-examples.md)
+- 规划：`../docs/planning-artifacts/project-prompt.md`
+
+---
 
 ## 许可证
 
-MIT（可按团队需要修改）。
+MIT

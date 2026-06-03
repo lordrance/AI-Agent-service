@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List
 
 import tiktoken
 from loguru import logger
@@ -40,7 +39,7 @@ class DocumentChunker:
             return len(text)
         return len(self._encoding.encode(text))
 
-    def chunk(self, text: str, strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[str]:
+    def chunk(self, text: str, strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> list[str]:
         """按策略将全文切分为块列表。"""
         text = text.strip()
         if not text:
@@ -52,7 +51,7 @@ class DocumentChunker:
             return self._chunk_paragraph(text)
         return self._chunk_recursive(text, _depth=0)
 
-    def _chunk_fixed(self, text: str) -> List[str]:
+    def _chunk_fixed(self, text: str) -> list[str]:
         """按固定字符窗口切片（近似 token 长度）。"""
         out: list[str] = []
         start = 0
@@ -67,7 +66,7 @@ class DocumentChunker:
                 start = 0
         return out
 
-    def _chunk_paragraph(self, text: str) -> List[str]:
+    def _chunk_paragraph(self, text: str) -> list[str]:
         """按空行分段，再合并到目标长度。"""
         paras = [p.strip() for p in text.split("\n\n") if p.strip()]
         merged: list[str] = []
@@ -90,7 +89,7 @@ class DocumentChunker:
         separators: list[str] | None = None,
         *,
         _depth: int = 0,
-    ) -> List[str]:
+    ) -> list[str]:
         """递归按分隔符切分，过长片段继续细分或退回固定窗口。"""
         if _depth > 24:
             return self._chunk_fixed(text)
@@ -110,16 +109,10 @@ class DocumentChunker:
                     buf = candidate
                 else:
                     if buf:
-                        merged.extend(
-                            self._chunk_recursive(
-                                buf, seps[i + 1 :], _depth=_depth + 1
-                            )
-                        )
+                        merged.extend(self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1))
                     buf = part
             if buf:
-                merged.extend(
-                    self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1)
-                )
+                merged.extend(self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1))
             return merged if merged else self._chunk_fixed(text)
 
         return self._chunk_fixed(text)

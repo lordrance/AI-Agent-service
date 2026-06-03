@@ -14,10 +14,14 @@ keywords = ["ai", "agent", "rag", "fastapi", "langchain"]
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
+    "gunicorn>=22.0.0",
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
     "langgraph>=0.3.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "psycopg[binary]>=3.1.0",
     "pymilvus>=2.5.0",
     "redis>=5.2.0",
     "sqlalchemy>=2.0.0",
@@ -36,6 +40,12 @@ dependencies = [
     "pypdf>=5.0.0",
     "openai>=1.60.0",
     "numpy>=2.0.0",
+    "alembic>=1.13.0",
+    "pgvector>=0.3.0",
+    "slowapi>=0.1.9",
+    "PyJWT>=2.8.0",
+    "opentelemetry-api>=1.27.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +54,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
+    "opentelemetry-sdk>=1.27.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -53,11 +64,22 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+# UP009: 全仓库沿用 `# -*- coding: utf-8 -*-` 头，保留既有风格
+# UP042: str + Enum 为项目有意采用的写法（依赖 .value 访问），不强制改 StrEnum 以免改变 str() 行为
+ignore = ["UP009", "UP042"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = false
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: 需要 PostgreSQL/pgvector 或 Redis 等外部依赖",
+]

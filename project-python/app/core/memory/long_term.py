@@ -17,16 +17,14 @@ from app.models.schemas import MemoryItem
 class LTMEmbedProtocol(Protocol):
     """嵌入模型接口。"""
 
-    def embed_query(self, text: str) -> list[float]:
-        ...
+    def embed_query(self, text: str) -> list[float]: ...
 
 
 @runtime_checkable
 class LTMCollectionProtocol(Protocol):
     """Milvus Collection 最小接口。"""
 
-    def insert(self, data: Any, **kwargs: Any) -> Any:
-        ...
+    def insert(self, data: Any, **kwargs: Any) -> Any: ...
 
     def search(
         self,
@@ -37,14 +35,11 @@ class LTMCollectionProtocol(Protocol):
         expr: str | None = None,
         output_fields: list[str] | None = None,
         **kwargs: Any,
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
-    def delete(self, expr: str, **kwargs: Any) -> Any:
-        ...
+    def delete(self, expr: str, **kwargs: Any) -> Any: ...
 
-    def flush(self, **kwargs: Any) -> Any:
-        ...
+    def flush(self, **kwargs: Any) -> Any: ...
 
 
 class LongTermMemory:
