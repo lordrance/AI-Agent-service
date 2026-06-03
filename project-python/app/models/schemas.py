@@ -113,3 +113,29 @@ class RAGResponse(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     raw_contexts: list[RetrievalResult] = Field(default_factory=list)
     model: str | None = None
+
+
+class RagQueryRequest(BaseModel):
+    """RAG 问答请求。"""
+
+    query: str = Field(min_length=1, description="用户问题")
+    top_k: int | None = Field(default=None, ge=1, le=50, description="检索上下文数量")
+    conversation_id: str | None = Field(default=None, description="可选会话 ID")
+
+
+class AgentRequest(BaseModel):
+    """Agent 工具调用请求。"""
+
+    input: str = Field(min_length=1, description="用户指令/问题")
+    session_id: str | None = Field(default=None, description="会话 ID（用于记忆/追踪）")
+    max_steps: int | None = Field(default=None, ge=1, le=30, description="最大步数（递归上限）")
+
+
+class AgentResponse(BaseModel):
+    """Agent 运行结果。"""
+
+    success: bool
+    answer: str
+    steps: int = 0
+    error: str | None = None
+    trace_id: str | None = None

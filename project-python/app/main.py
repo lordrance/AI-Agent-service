@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
-from app.api.routes import chat, document, health
+from app.api.routes import agent, chat, document, health, rag
 from app.config import get_settings
 from app.core.langgraph.graph import build_chat_graph
 from app.core.langgraph.model import build_router_model_fn
@@ -67,6 +67,8 @@ def create_app() -> FastAPI:
     application.include_router(health.router, prefix=settings.api_prefix)
     application.include_router(chat.router, prefix=settings.api_prefix)
     application.include_router(document.router, prefix=settings.api_prefix)
+    application.include_router(rag.router, prefix=settings.api_prefix)
+    application.include_router(agent.router, prefix=settings.api_prefix)
     return application
 
 

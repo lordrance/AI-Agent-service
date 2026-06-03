@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     vector_table: str = Field(default="knowledge_vectors", description="pgvector 表名")
     vector_metric: str = Field(default="cosine", description="相似度度量：cosine | l2 | ip")
 
+    agent_max_steps: int = Field(default=8, description="ReAct Agent 最大步数（递归上限）")
+    agent_timeout_seconds: float = Field(default=60.0, description="Agent 单次运行总超时（秒）")
+
+    rag_top_k: int = Field(default=5, description="RAG 检索返回的上下文数量")
+    rerank_enabled: bool = Field(
+        default=False,
+        description="是否启用 Cross-Encoder 重排（需 sentence-transformers）",
+    )
+    reranker_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description="重排模型名",
+    )
+
     langfuse_enabled: bool = Field(default=False, description="是否启用 Langfuse 追踪导出")
     langfuse_host: str = Field(
         default="https://cloud.langfuse.com",
