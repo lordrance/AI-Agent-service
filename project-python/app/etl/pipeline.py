@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Awaitable, List
+from typing import Any
 
 from loguru import logger
 
@@ -16,7 +17,7 @@ from app.etl.parser import DocumentParser, ParsedDocument
 class ETLResult:
     """流水线输出。"""
 
-    chunks: List[str]
+    chunks: list[str]
     parsed: ParsedDocument
     meta: dict[str, Any]
 
@@ -39,7 +40,7 @@ class ETLPipeline:
         mime_type: str | None,
         *,
         strategy: ChunkStrategy = ChunkStrategy.RECURSIVE,
-        on_chunks: Callable[[List[str], ParsedDocument], Awaitable[None]] | None = None,
+        on_chunks: Callable[[list[str], ParsedDocument], Awaitable[None]] | None = None,
     ) -> ETLResult:
         """对上传字节执行解析与分块；可选异步回调处理向量入库等。"""
         try:

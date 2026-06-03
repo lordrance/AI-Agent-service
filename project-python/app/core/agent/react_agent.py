@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def build_react_user_prompt(
 class LLMCallable(Protocol):
     """可被 ReAct 调用的最小 LLM 接口。"""
 
-    async def acomplete(self, messages: Sequence[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: Sequence[dict[str, str]], **kwargs: Any) -> str:
         """返回模型生成的文本。"""
         ...
 
@@ -67,7 +68,7 @@ class LLMCallable(Protocol):
 class MemoryLike(Protocol):
     """记忆系统最小接口。"""
 
-    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> List[str]:
+    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
         ...
 
     async def append_turn(
@@ -75,7 +76,7 @@ class MemoryLike(Protocol):
         session_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         ...
 
@@ -83,7 +84,7 @@ class MemoryLike(Protocol):
 class ToolInvoker(Protocol):
     """工具调用：按名称执行并返回字符串化观察结果。"""
 
-    async def invoke(self, name: str, arguments: Dict[str, Any]) -> str:
+    async def invoke(self, name: str, arguments: dict[str, Any]) -> str:
         ...
 
 
@@ -93,17 +94,17 @@ class AgentResult:
 
     success: bool
     final_answer: str
-    steps: List[Dict[str, Any]] = field(default_factory=list)
-    error: Optional[str] = None
-    trace_id: Optional[str] = None
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    trace_id: str | None = None
 
 
-def _parse_react_step(text: str) -> Dict[str, Any]:
+def _parse_react_step(text: str) -> dict[str, Any]:
     """
     从模型输出解析 Thought / Action / Action Input / Final Answer。
     解析失败时返回原始片段，由上层决定是否重试或报错。
     """
-    out: Dict[str, Any] = {"raw": text.strip()}
+    out: dict[str, Any] = {"raw": text.strip()}
     thought_m = re.search(r"Thought:\s*(.+?)(?=\n(?:Action:|Final Answer:)|\Z)", text, re.S | re.I)
     if thought_m:
         out["thought"] = thought_m.group(1).strip()
@@ -146,9 +147,9 @@ class ReActAgent:
         self,
         llm: LLMCallable,
         tools: ToolInvoker,
-        memory: Optional[MemoryLike],
+        memory: MemoryLike | None,
         max_steps: int = 10,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._tools = tools
@@ -163,7 +164,7 @@ class ReActAgent:
             lines.append(f"- {name}")
         return "\n".join(lines) if lines else "（无外部工具，请直接 Final Answer）"
 
-    async def run(self, query: str, context: Dict[str, Any]) -> AgentResult:
+    async def run(self, query: str, context: dict[str, Any]) -> AgentResult:
         """
         执行 ReAct 循环。
 
@@ -174,13 +175,13 @@ class ReActAgent:
         """
         session_id = str(context.get("session_id", self.session_id))
         trace_cb = context.get("trace_callback")
-        tool_names: List[str] = list(context.get("tool_names") or [])
+        tool_names: list[str] = list(context.get("tool_names") or [])
         extra_system = str(context.get("extra_system", ""))
 
-        steps: List[Dict[str, Any]] = []
-        history_lines: List[str] = []
+        steps: list[dict[str, Any]] = []
+        history_lines: list[str] = []
 
-        mem_snippets: List[str] = []
+        mem_snippets: list[str] = []
         if self._memory is not None:
             try:
                 mem_snippets = await self._memory.get_relevant(session_id, query, limit=8)
@@ -193,7 +194,7 @@ class ReActAgent:
             tool_desc = self._tool_catalog_text(tool_names)
             history_block = "\n".join(history_lines) if history_lines else "（尚无）"
             user_prompt = build_react_user_prompt(query, tool_desc, history_block)
-            messages: List[Dict[str, str]] = [
+            messages: list[dict[str, str]] = [
                 {
                     "role": "system",
                     "content": REACT_SYSTEM_PROMPT
@@ -220,7 +221,7 @@ class ReActAgent:
                 )
 
             parsed = _parse_react_step(raw)
-            rec: Dict[str, Any] = {
+            rec: dict[str, Any] = {
                 "step": step_idx,
                 "phase": "react",
                 "raw_llm": raw[:4000],

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -98,7 +98,8 @@ async def _stream_generator(
     """SSE 风格流：每行 data: {json}\\n\\n。"""
     settings = get_settings()
     if not settings.openai_api_key:
-        yield b"data: " + json.dumps({"error": "未配置 API Key"}, ensure_ascii=False).encode() + b"\n\n"
+        payload = json.dumps({"error": "未配置 API Key"}, ensure_ascii=False)
+        yield b"data: " + payload.encode() + b"\n\n"
         return
 
     client = AsyncOpenAI(

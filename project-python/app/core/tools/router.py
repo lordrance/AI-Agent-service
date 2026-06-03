@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import re
-from typing import List
 
 from loguru import logger
 
@@ -17,7 +16,7 @@ class ToolRouter:
     def __init__(self, max_tools: int = 5) -> None:
         self._max_tools = max(1, max_tools)
 
-    async def route(self, query: str, available_tools: List[BaseTool]) -> List[BaseTool]:
+    async def route(self, query: str, available_tools: list[BaseTool]) -> list[BaseTool]:
         """根据用户查询从候选工具中筛选最可能用到的若干工具。"""
         if not available_tools:
             return []

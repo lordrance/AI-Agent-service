@@ -11,7 +11,6 @@ from loguru import logger
 
 from app.core.tools.base import BaseTool, ToolParameter
 
-
 _ALLOWED_OPS = {
     ast.Add: op.add,
     ast.Sub: op.sub,

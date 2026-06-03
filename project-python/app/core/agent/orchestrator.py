@@ -8,8 +8,9 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence
+from typing import Any, Literal, Protocol
 
 from app.core.agent.planner import PlannerAgent
 from app.core.agent.react_agent import AgentResult, ReActAgent
@@ -44,7 +45,7 @@ class ModelRouter(Protocol):
 class MemoryManager(Protocol):
     """记忆管理。"""
 
-    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> List[str]:
+    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
         ...
 
     async def append_turn(
@@ -52,7 +53,7 @@ class MemoryManager(Protocol):
         session_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         ...
 
@@ -60,10 +61,10 @@ class MemoryManager(Protocol):
 class ToolRegistry(Protocol):
     """工具注册表：列举与调用。"""
 
-    def list_tool_names(self) -> List[str]:
+    def list_tool_names(self) -> list[str]:
         ...
 
-    async def invoke(self, name: str, arguments: Dict[str, Any]) -> str:
+    async def invoke(self, name: str, arguments: dict[str, Any]) -> str:
         ...
 
 
@@ -73,13 +74,13 @@ class Tracer(Protocol):
     def new_trace_id(self) -> str:
         ...
 
-    def start_span(self, name: str, trace_id: str, attributes: Optional[Dict[str, Any]] = None) -> Any:
+    def start_span(self, name: str, trace_id: str, attributes: dict[str, Any] | None = None) -> Any:
         ...
 
-    def end_span(self, span: Any, error: Optional[BaseException] = None) -> None:
+    def end_span(self, span: Any, error: BaseException | None = None) -> None:
         ...
 
-    def log_event(self, trace_id: str, name: str, payload: Dict[str, Any]) -> None:
+    def log_event(self, trace_id: str, name: str, payload: dict[str, Any]) -> None:
         ...
 
 
@@ -95,9 +96,9 @@ class IntentContext:
 
     intent: str = "general"
     confidence: float = 1.0
-    slots: Dict[str, Any] = field(default_factory=dict)
-    preferred_mode: Optional[OrchestrationMode] = None
-    allowed_tools: Optional[List[str]] = None
+    slots: dict[str, Any] = field(default_factory=dict)
+    preferred_mode: OrchestrationMode | None = None
+    allowed_tools: list[str] | None = None
 
 
 @dataclass
@@ -109,9 +110,9 @@ class AgentResponse:
     success: bool
     trace_id: str
     intent: IntentContext
-    steps: List[Dict[str, Any]] = field(default_factory=list)
-    reflection: Optional[ReflectionReport] = None
-    error: Optional[str] = None
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    reflection: ReflectionReport | None = None
+    error: str | None = None
     degraded: bool = False
 
 
@@ -121,7 +122,7 @@ class _LLMAdapter:
     def __init__(self, llm: Any) -> None:
         self._llm = llm
 
-    async def acomplete(self, messages: Sequence[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: Sequence[dict[str, str]], **kwargs: Any) -> str:
         fn = getattr(self._llm, "acomplete", None)
         if callable(fn):
             return await fn(messages, **kwargs)
@@ -159,7 +160,7 @@ class AgentOrchestrator:
         self._enable_reflection = bool(config.get("enable_reflection", True))
         self._fallback_on_plan_failure = bool(config.get("fallback_react_on_plan_failure", True))
 
-    def _tool_names(self, intent: IntentContext) -> List[str]:
+    def _tool_names(self, intent: IntentContext) -> list[str]:
         all_names = self._tools.list_tool_names()
         if intent.allowed_tools:
             return [n for n in intent.allowed_tools if n in all_names]
@@ -170,7 +171,7 @@ class AgentOrchestrator:
         user_input: str,
         session_id: str,
         mode: str = "react",
-        intent: Optional[IntentContext] = None,
+        intent: IntentContext | None = None,
     ) -> AgentResponse:
         """执行 Agent 编排：集成记忆、工具、追踪与可选反思。"""
         intent_ctx = intent or IntentContext()
@@ -190,10 +191,10 @@ class AgentOrchestrator:
             {"user_input_len": len(user_input), "mode": mode},
         )
 
-        steps: List[Dict[str, Any]] = []
+        steps: list[dict[str, Any]] = []
         degraded = False
-        error_msg: Optional[str] = None
-        result: Optional[AgentResult] = None
+        error_msg: str | None = None
+        result: AgentResult | None = None
         mode_used: OrchestrationMode = "react"
 
         try:
@@ -230,7 +231,7 @@ class AgentOrchestrator:
             answer = (result.final_answer if result else "") or ""
             success = bool(result and result.success)
 
-            reflection_report: Optional[ReflectionReport] = None
+            reflection_report: ReflectionReport | None = None
             if self._enable_reflection and answer:
                 try:
                     reflection_report = await self._run_reflection(
@@ -279,13 +280,13 @@ class AgentOrchestrator:
         session_id: str,
         intent: IntentContext,
         trace_id: str,
-        steps: List[Dict[str, Any]],
+        steps: list[dict[str, Any]],
         suffix: str = "",
     ) -> AgentResult:
         llm = _LLMAdapter(self._model_router.get_llm("react"))
         max_steps = int(self._config.get("react_max_steps", 10))
 
-        async def trace_cb(rec: Dict[str, Any]) -> None:
+        async def trace_cb(rec: dict[str, Any]) -> None:
             payload = {"ts": time.time(), **rec}
             steps.append(payload)
             self._tracer.log_event(trace_id, "react.step", payload)
@@ -298,7 +299,7 @@ class AgentOrchestrator:
             session_id=session_id,
         )
 
-        ctx: Dict[str, Any] = {
+        ctx: dict[str, Any] = {
             "session_id": session_id,
             "tool_names": self._tool_names(intent),
             "trace_callback": trace_cb,
@@ -320,11 +321,11 @@ class AgentOrchestrator:
         session_id: str,
         intent: IntentContext,
         trace_id: str,
-        steps: List[Dict[str, Any]],
+        steps: list[dict[str, Any]],
     ) -> AgentResult:
         llm = _LLMAdapter(self._model_router.get_llm("planner"))
 
-        async def trace_cb(payload: Dict[str, Any]) -> None:
+        async def trace_cb(payload: dict[str, Any]) -> None:
             entry = {"ts": time.time(), **payload}
             steps.append(entry)
             self._tracer.log_event(trace_id, "plan_execute", entry)
@@ -355,10 +356,13 @@ class AgentOrchestrator:
         user_query: str,
         answer: str,
         trace_id: str,
-        steps: List[Dict[str, Any]],
+        steps: list[dict[str, Any]],
     ) -> ReflectionReport:
         llm = _LLMAdapter(self._model_router.get_llm("reflection"))
-        agent = ReflectionAgent(llm=llm, min_quality_to_pass=int(self._config.get("reflection_min_quality", 60)))
+        agent = ReflectionAgent(
+            llm=llm,
+            min_quality_to_pass=int(self._config.get("reflection_min_quality", 60)),
+        )
         trace_summary = str([s.get("phase") or s.get("subtask_id") for s in steps[-20:]])
         self._tracer.log_event(trace_id, "reflection.begin", {})
         report = await agent.reflect(
@@ -382,16 +386,20 @@ class InMemoryTracer:
     """内存追踪器实现，用于单测或无基础设施环境。"""
 
     def __init__(self) -> None:
-        self.events: List[Dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
 
     def new_trace_id(self) -> str:
         return str(uuid.uuid4())
 
-    def start_span(self, name: str, trace_id: str, attributes: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def start_span(
+        self, name: str, trace_id: str, attributes: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         return {"name": name, "trace_id": trace_id, "attributes": attributes or {}}
 
-    def end_span(self, span: Any, error: Optional[BaseException] = None) -> None:
-        self.events.append({"type": "end_span", "span": span, "error": str(error) if error else None})
+    def end_span(self, span: Any, error: BaseException | None = None) -> None:
+        self.events.append(
+            {"type": "end_span", "span": span, "error": str(error) if error else None}
+        )
 
-    def log_event(self, trace_id: str, name: str, payload: Dict[str, Any]) -> None:
+    def log_event(self, trace_id: str, name: str, payload: dict[str, Any]) -> None:
         self.events.append({"trace_id": trace_id, "name": name, "payload": payload})

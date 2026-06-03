@@ -107,6 +107,7 @@ class IntentRecognizer:
 
         return (
             "我不太确定您的具体需求。"
-            f"您是想了解「{intent_result.intent}」相关（当前置信度 {intent_result.confidence:.2f}）吗？"
+            f"您是想了解「{intent_result.intent}」相关"
+            f"（当前置信度 {intent_result.confidence:.2f}）吗？"
             "请补充场景、对象或期望的输出格式（例如：只要结论 / 需要步骤）。"
         )

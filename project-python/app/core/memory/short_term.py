@@ -144,7 +144,12 @@ class ShortTermMemory:
             logger.exception("压缩重写 Redis 列表失败: {}", e)
             raise RuntimeError(f"记忆压缩失败: {e}") from e
 
-        logger.info("会话 {} 已压缩，摘要 {} 条历史，保留 {} 条", session_id, len(to_summarize), len(tail))
+        logger.info(
+            "会话 {} 已压缩，摘要 {} 条历史，保留 {} 条",
+            session_id,
+            len(to_summarize),
+            len(tail),
+        )
 
     async def _summarize_messages(self, messages: list[Message]) -> str:
         """调用 LLM 生成摘要。"""

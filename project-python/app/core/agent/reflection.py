@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +42,22 @@ class ReflectionReport:
     quality_score: int
     is_complete: bool
     likely_hallucination: bool
-    hallucination_reasons: List[str]
+    hallucination_reasons: list[str]
     completeness_notes: str
-    suggestions: List[str]
+    suggestions: list[str]
     summary: str
-    raw_model_output: Optional[str] = None
-    parse_error: Optional[str] = None
+    raw_model_output: str | None = None
+    parse_error: str | None = None
 
 
 class ReflectionLLM(Protocol):
     """反思阶段使用的 LLM。"""
 
-    async def acomplete(self, messages: Sequence[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: Sequence[dict[str, str]], **kwargs: Any) -> str:
         ...
 
 
-def _extract_json(text: str) -> Dict[str, Any]:
+def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     try:
         return json.loads(text)
@@ -79,8 +80,8 @@ class ReflectionAgent:
         self,
         user_query: str,
         agent_answer: str,
-        evidence_snippets: Optional[List[str]] = None,
-        trace_summary: Optional[str] = None,
+        evidence_snippets: list[str] | None = None,
+        trace_summary: str | None = None,
     ) -> ReflectionReport:
         """
         对助手答案进行质量检查。
@@ -104,7 +105,7 @@ class ReflectionAgent:
 
 请输出 JSON 审查结果。"""
 
-        messages: Sequence[Dict[str, str]] = [
+        messages: Sequence[dict[str, str]] = [
             {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ]
@@ -143,7 +144,7 @@ class ReflectionAgent:
         )
         return report
 
-    def should_retry_or_warn(self, report: ReflectionReport) -> Dict[str, Any]:
+    def should_retry_or_warn(self, report: ReflectionReport) -> dict[str, Any]:
         """
         根据报告给出是否建议重试/告警的企业级决策结构。
         """

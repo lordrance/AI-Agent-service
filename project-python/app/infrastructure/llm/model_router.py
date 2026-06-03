@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -115,7 +114,7 @@ class ModelRouter:
                 # 熔断打开
                 last_error = exc
                 logger.warning("模型 [{}] 被熔断跳过: {}", cfg.model_id, exc)
-            except (APIError, RateLimitError, asyncio.TimeoutError) as exc:
+            except (TimeoutError, APIError, RateLimitError) as exc:
                 last_error = exc
                 logger.warning("模型 [{}] 调用失败，尝试降级: {}", cfg.model_id, exc)
             except Exception as exc:

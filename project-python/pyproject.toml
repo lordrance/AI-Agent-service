@@ -62,8 +62,9 @@ extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-# 全仓库沿用 `# -*- coding: utf-8 -*-` 头，保留既有风格，避免无关改动
-ignore = ["UP009"]
+# UP009: 全仓库沿用 `# -*- coding: utf-8 -*-` 头，保留既有风格
+# UP042: str + Enum 为项目有意采用的写法（依赖 .value 访问），不强制改 StrEnum 以免改变 str() 行为
+ignore = ["UP009", "UP042"]
 
 [tool.mypy]
 python_version = "3.11"

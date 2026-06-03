@@ -22,6 +22,9 @@ __pycache__/
 .venv/
 venv/
 
+# Runtime artifacts (e.g. document upload staging in project-python)
+uploads/
+
 # Playwright artifacts
 playwright-report/
 test-results/
