@@ -39,25 +39,29 @@ async def test_rag_retrieve_and_generate(require_db):
     ]
 
     try:
-        await store.upsert(records)
+        await store.upsert(records, namespace="anonymous")
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"pgvector 不可用：{exc}")
 
     try:
         # 仅检索（无生成器）：RAG 文档应排第一
-        svc_no_gen = RagService(vector_store=store, embedder=emb, generator=None)
+        svc_no_gen = RagService(
+            vector_store=store, embedder=emb, generator=None, tenant_id="anonymous"
+        )
         contexts = await svc_no_gen.retrieve("RAG 检索问答", top_k=3)
         assert contexts and contexts[0].id == f"{prefix}rag"
         assert contexts[0].metadata.get("document_id") == "docR"
 
         # 带生成器：返回答案与解析出的引用
         gen = RAGGenerator(llm=_FakeCitingLLM(), model_name="fake")
-        svc = RagService(vector_store=store, embedder=emb, generator=gen)
+        svc = RagService(
+            vector_store=store, embedder=emb, generator=gen, tenant_id="anonymous"
+        )
         resp = await svc.answer("RAG 检索问答", top_k=3)
         assert "[1]" in resp.answer
         assert len(resp.citations) == 1
         assert resp.citations[0].index == 1
         assert resp.raw_contexts
     finally:
-        await store.delete(list(texts.keys()))
+        await store.delete(list(texts.keys()), namespace="anonymous")
         await store.close()

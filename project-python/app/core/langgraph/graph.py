@@ -13,6 +13,7 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+from loguru import logger
 
 ModelFn = Callable[[list[BaseMessage]], Awaitable[BaseMessage]]
 
@@ -56,3 +57,18 @@ async def run_chat(graph, thread_id: str, messages: list[BaseMessage]) -> str:
     )
     last = result["messages"][-1]
     return last.content if isinstance(last, BaseMessage) else str(last)
+
+
+async def append_chat_messages(
+    graph,
+    thread_id: str,
+    messages: list[BaseMessage],
+) -> None:
+    """将消息追加到检查点（用于流式结束后持久化）。"""
+    if graph is None or not messages:
+        return
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        await graph.aupdate_state(config, {"messages": messages})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("流式会话写入检查点失败: {}", exc)

@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.config import get_settings
 from app.infrastructure.vectordb.base import VectorStore
 from app.infrastructure.vectordb.pgvector_store import PgVectorStore
+from app.infrastructure.vectordb.pinecone_store import PineconeVectorStore
 
 
 def build_vector_store() -> VectorStore:
@@ -16,8 +17,13 @@ def build_vector_store() -> VectorStore:
     settings = get_settings()
     kind = settings.vector_store.lower().strip()
     if kind == "pinecone":
-        raise NotImplementedError(
-            "Pinecone 适配器尚未实现（VectorStore 端口已预留，按需补充）"
+        if not settings.pinecone_api_key:
+            raise ValueError("VECTOR_STORE=pinecone 但未配置 PINECONE_API_KEY")
+        return PineconeVectorStore(
+            api_key=settings.pinecone_api_key,
+            index_name=settings.pinecone_index,
+            host=settings.pinecone_host,
+            metric=settings.vector_metric,
         )
     return PgVectorStore(
         dsn=settings.database_url,

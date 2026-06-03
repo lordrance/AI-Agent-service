@@ -129,6 +129,10 @@ class AgentRequest(BaseModel):
     input: str = Field(min_length=1, max_length=32_000, description="用户指令/问题")
     session_id: str | None = Field(default=None, description="会话 ID（用于记忆/追踪）")
     max_steps: int | None = Field(default=None, ge=1, le=30, description="最大步数（递归上限）")
+    use_memory: bool = Field(
+        default=False,
+        description="是否启用 Redis 短期 + 向量长期记忆",
+    )
 
 
 class AgentResponse(BaseModel):

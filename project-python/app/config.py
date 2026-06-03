@@ -57,9 +57,29 @@ class Settings(BaseSettings):
         default=1536,
         description="嵌入维度（须与向量库迁移中的 vector(dim) 一致；改动需新迁移）",
     )
-    vector_store: str = Field(default="pgvector", description="向量库实现：pgvector | pinecone")
+    vector_store: str = Field(
+        default="pgvector",
+        description="向量库实现：pgvector（本地/CI）| pinecone（生产推荐）",
+    )
     vector_table: str = Field(default="knowledge_vectors", description="pgvector 表名")
     vector_metric: str = Field(default="cosine", description="相似度度量：cosine | l2 | ip")
+
+    pinecone_api_key: str = Field(default="", description="Pinecone API Key")
+    pinecone_index: str = Field(default="agent-knowledge", description="Pinecone 索引名")
+    pinecone_host: str = Field(
+        default="",
+        description="Pinecone Serverless 区域 host（控制台提供，Pod 模式可留空）",
+    )
+
+    rag_hybrid_enabled: bool = Field(default=True, description="RAG 是否启用向量+BM25+RRF")
+    rag_bm25_max_docs_per_tenant: int = Field(
+        default=10_000,
+        description="每租户 BM25 索引最大分块数",
+    )
+    chat_stream_buffer_max_chars: int = Field(
+        default=8000,
+        description="流式输出护栏校验前的最大累积字符",
+    )
 
     agent_max_steps: int = Field(default=8, description="ReAct Agent 最大步数（递归上限）")
     agent_timeout_seconds: float = Field(default=60.0, description="Agent 单次运行总超时（秒）")

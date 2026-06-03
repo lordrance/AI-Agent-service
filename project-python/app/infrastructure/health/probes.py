@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.infrastructure.vectordb.base import VectorStore
 from app.infrastructure.vectordb.pgvector_store import PgVectorStore, _to_asyncpg_dsn
+from app.infrastructure.vectordb.pinecone_store import PineconeVectorStore
 
 
 async def check_database(session: AsyncSession) -> bool:
@@ -51,4 +52,6 @@ async def check_vector_store(vector_store: VectorStore) -> bool:
         except Exception as exc:
             logger.warning("向量库探针失败: {}", exc)
             return False
+    if isinstance(vector_store, PineconeVectorStore):
+        return await vector_store.ping()
     return True

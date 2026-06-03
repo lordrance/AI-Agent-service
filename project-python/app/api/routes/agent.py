@@ -8,18 +8,24 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 
-from app.api.context import build_thread_id, set_session_id, set_trace_id
+from app.api.context import build_thread_id, require_tenant_id, set_session_id, set_trace_id
 from app.config import get_settings
 from app.core.agent.react_agent import ReActAgent
 from app.core.guardrails.pipeline import guard_input_text, guard_output_text
+from app.core.memory.manager import MemoryManager
+from app.core.memory.short_term import ShortTermMemory
+from app.core.memory.vector_long_term import VectorLongTermMemory
 from app.core.tools.builtin import CalculatorTool, WebSearchTool
 from app.core.tools.registry import ToolRegistry
+from app.infrastructure.embeddings import get_embedder
 from app.infrastructure.llm.factory import build_model_router
 from app.infrastructure.llm.model_router import ModelRouter
 from app.infrastructure.trace.tracer import Tracer
+from app.infrastructure.vectordb.base import VectorStore
 from app.models.schemas import AgentRequest, AgentResponse
 
 router = APIRouter(tags=["agent"])
@@ -38,7 +44,6 @@ class _ReactLLM:
 
 
 def _build_registry() -> ToolRegistry:
-    """注册无需外部凭据的内置工具。"""
     reg = ToolRegistry()
     reg.register(CalculatorTool())
     reg.register(WebSearchTool())
@@ -52,8 +57,36 @@ def _build_llm() -> _ReactLLM:
     return _ReactLLM(model_router)
 
 
+def get_vector_store(request: Request) -> VectorStore:
+    return request.app.state.vector_store
+
+
+class _NoopCompressLLM:
+    async def ainvoke(self, input: Any, **kwargs: Any) -> str:
+        return str(input)[:500]
+
+
+def _build_memory(request: AgentRequest, vector_store: VectorStore) -> MemoryManager | None:
+    if not request.use_memory:
+        return None
+    settings = get_settings()
+    tenant_id = require_tenant_id()
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+    stm = ShortTermMemory(redis_client, _NoopCompressLLM())
+    ltm = VectorLongTermMemory(
+        vector_store=vector_store,
+        embedder=get_embedder(),
+        tenant_id=tenant_id,
+    )
+    return MemoryManager(short_term=stm, long_term=ltm)
+
+
 @router.post("/agent", response_model=AgentResponse)
-async def run_agent(request: AgentRequest) -> AgentResponse:
+async def run_agent(
+    request: AgentRequest,
+    http_request: Request,
+    vector_store: VectorStore = Depends(get_vector_store),
+) -> AgentResponse:
     """以 ReAct 方式执行工具调用，受最大步数与总超时约束。"""
     settings = get_settings()
     llm = _build_llm()
@@ -74,10 +107,12 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
             parent_span=span,
         )
 
+    memory = _build_memory(request, vector_store)
+
     agent = ReActAgent(
         llm=llm,
         tools=registry,
-        memory=None,
+        memory=memory,
         max_steps=max_steps,
         session_id=session_id,
     )

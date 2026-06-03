@@ -12,6 +12,7 @@ from typing import Any
 from loguru import logger
 
 from app.core.rag.generator import RAGGenerator
+from app.core.rag.hybrid_retriever import HybridRetriever
 from app.core.rag.reranker import Reranker
 from app.infrastructure.embeddings.base import Embedder
 from app.infrastructure.metrics.prometheus import record_rag_retrieval
@@ -30,29 +31,40 @@ class RagService:
         generator: RAGGenerator | None = None,
         reranker: Reranker | None = None,
         rerank_top_k: int = 5,
+        hybrid: HybridRetriever | None = None,
+        tenant_id: str = "anonymous",
     ) -> None:
         self._vs = vector_store
         self._embedder = embedder
         self._generator = generator
         self._reranker = reranker
         self._rerank_top_k = rerank_top_k
+        self._hybrid = hybrid
+        self._tenant_id = tenant_id
 
     async def retrieve(self, query: str, top_k: int = 10) -> list[RetrievalResult]:
-        """向量检索（可选重排），返回 RetrievalResult 列表。"""
+        """混合或向量检索（可选重排），返回 RetrievalResult 列表。"""
         with genai_span("gen_ai.retrieval") as span:
             try:
-                vector = await asyncio.to_thread(self._embedder.embed_query, query)
-                hits = await self._vs.search(vector, top_k=top_k)
-                results = [
-                    RetrievalResult(
-                        id=h.id,
-                        content=h.content,
-                        score=h.score,
-                        metadata={**h.metadata, "document_id": h.document_id},
-                        source="vector",
+                if self._hybrid is not None:
+                    results = await self._hybrid.retrieve(
+                        query, self._tenant_id, top_k=top_k
                     )
-                    for h in hits
-                ]
+                else:
+                    vector = await asyncio.to_thread(self._embedder.embed_query, query)
+                    hits = await self._vs.search(
+                        vector, top_k=top_k, namespace=self._tenant_id
+                    )
+                    results = [
+                        RetrievalResult(
+                            id=h.id,
+                            content=h.content,
+                            score=h.score,
+                            metadata={**h.metadata, "document_id": h.document_id},
+                            source="vector",
+                        )
+                        for h in hits
+                    ]
                 if self._reranker is not None and results:
                     try:
                         results = await self._reranker.rerank(

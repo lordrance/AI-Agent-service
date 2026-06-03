@@ -86,6 +86,7 @@ class Document(Base):
         primary_key=True,
         default=_uuid,
     )
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="anonymous")
     filename: Mapped[str] = mapped_column(String(1024))
     mime_type: Mapped[str | None] = mapped_column(String(256), nullable=True)
     storage_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)

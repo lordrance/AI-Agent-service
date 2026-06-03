@@ -20,7 +20,9 @@
          └──────────┘ └─────────┘ └──────────┘
 ```
 
-主向量库为 **pgvector**（与 Alembic 迁移一致）。Milvus 为历史可选组件，默认 Compose 栈不再包含。
+**生产推荐** `VECTOR_STORE=pinecone`（托管向量库，namespace 对齐 `tenant_id`）。**本地/CI** 使用 `VECTOR_STORE=pgvector`（与 Alembic 迁移一致）。Milvus 为历史可选组件，默认 Compose 栈不再包含。
+
+Pinecone 建索引步骤：在控制台创建 index，维度与 `EMBEDDING_DIM`（默认 1536）一致；配置 `PINECONE_API_KEY`、`PINECONE_INDEX`，Serverless 需填写 `PINECONE_HOST`。
 
 ## 2. 生产镜像（S5.1）
 

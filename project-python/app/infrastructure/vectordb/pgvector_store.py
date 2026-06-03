@@ -74,7 +74,12 @@ class PgVectorStore(VectorStore):
         # l2：距离越小越相关
         return -distance
 
-    async def upsert(self, records: list[VectorRecord]) -> list[str]:
+    async def upsert(
+        self,
+        records: list[VectorRecord],
+        *,
+        namespace: str | None = None,
+    ) -> list[str]:
         if not records:
             return []
         pool = await self._ensure_pool()
@@ -85,16 +90,20 @@ class PgVectorStore(VectorStore):
             f"document_id = EXCLUDED.document_id, content = EXCLUDED.content, "
             f"metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding"
         )
-        rows = [
-            (
-                r.id,
-                r.document_id,
-                r.content,
-                json.dumps(r.metadata or {}, ensure_ascii=False),
-                r.embedding,
+        rows = []
+        for r in records:
+            meta = dict(r.metadata or {})
+            if namespace:
+                meta["tenant_id"] = namespace
+            rows.append(
+                (
+                    r.id,
+                    r.document_id,
+                    r.content,
+                    json.dumps(meta, ensure_ascii=False),
+                    r.embedding,
+                )
             )
-            for r in records
-        ]
         try:
             async with pool.acquire() as conn:
                 await conn.executemany(sql, rows)
@@ -103,16 +112,33 @@ class PgVectorStore(VectorStore):
             raise RuntimeError(f"向量写入失败: {exc}") from exc
         return [r.id for r in records]
 
-    async def search(self, query_embedding: list[float], top_k: int = 10) -> list[VectorHit]:
+    async def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        *,
+        namespace: str | None = None,
+    ) -> list[VectorHit]:
         pool = await self._ensure_pool()
-        sql = (
-            f"SELECT id, document_id, content, metadata, "
-            f"embedding {self._op} $1 AS distance "
-            f"FROM {self._table} ORDER BY embedding {self._op} $1 ASC LIMIT $2"
-        )
+        if namespace:
+            sql = (
+                f"SELECT id, document_id, content, metadata, "
+                f"embedding {self._op} $1 AS distance "
+                f"FROM {self._table} "
+                f"WHERE metadata->>'tenant_id' = $3 "
+                f"ORDER BY embedding {self._op} $1 ASC LIMIT $2"
+            )
+            params: tuple[Any, ...] = (query_embedding, top_k, namespace)
+        else:
+            sql = (
+                f"SELECT id, document_id, content, metadata, "
+                f"embedding {self._op} $1 AS distance "
+                f"FROM {self._table} ORDER BY embedding {self._op} $1 ASC LIMIT $2"
+            )
+            params = (query_embedding, top_k)
         try:
             async with pool.acquire() as conn:
-                records = await conn.fetch(sql, query_embedding, top_k)
+                records = await conn.fetch(sql, *params)
         except Exception as exc:  # noqa: BLE001
             logger.exception("pgvector 检索失败 table={}", self._table)
             raise RuntimeError(f"向量检索失败: {exc}") from exc
@@ -134,7 +160,7 @@ class PgVectorStore(VectorStore):
             )
         return hits
 
-    async def delete(self, ids: list[str]) -> None:
+    async def delete(self, ids: list[str], *, namespace: str | None = None) -> None:
         if not ids:
             return
         pool = await self._ensure_pool()

@@ -33,15 +33,29 @@ class VectorStore(ABC):
     """向量库统一接口。"""
 
     @abstractmethod
-    async def upsert(self, records: list[VectorRecord]) -> list[str]:
-        """插入或更新一批向量，返回写入的 id 列表。"""
+    async def upsert(
+        self,
+        records: list[VectorRecord],
+        *,
+        namespace: str | None = None,
+    ) -> list[str]:
+        """插入或更新一批向量，返回写入的 id 列表。
+
+        ``namespace``：Pinecone 用 namespace；pgvector 写入 metadata.tenant_id 并过滤。
+        """
 
     @abstractmethod
-    async def search(self, query_embedding: list[float], top_k: int = 10) -> list[VectorHit]:
+    async def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        *,
+        namespace: str | None = None,
+    ) -> list[VectorHit]:
         """按向量相似度检索 top_k。"""
 
     @abstractmethod
-    async def delete(self, ids: list[str]) -> None:
+    async def delete(self, ids: list[str], *, namespace: str | None = None) -> None:
         """按 id 删除。"""
 
     async def close(self) -> None:

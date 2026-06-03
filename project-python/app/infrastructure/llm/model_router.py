@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -236,3 +237,38 @@ class ModelRouter:
             raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
             finish_reason=str(finish_reason) if finish_reason else None,
         )
+
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        model_preference: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """流式输出文本增量；使用首个可用候选模型。"""
+        candidates = self._select_candidates(model_preference)
+        if not candidates:
+            raise RuntimeError("无可用模型")
+        cfg = candidates[0]
+        client = self._clients[cfg.model_id]
+        temperature = kwargs.pop("temperature", 0.7)
+        max_tokens = kwargs.pop("max_tokens", None)
+        if self._max_tokens_cap is not None and max_tokens is not None:
+            max_tokens = min(int(max_tokens), self._max_tokens_cap)
+
+        params: dict[str, Any] = {
+            "model": cfg.model_id,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        params.update(kwargs)
+
+        stream = await client.chat.completions.create(**params)
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta

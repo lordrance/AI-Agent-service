@@ -13,6 +13,7 @@ from app.api.routes import agent, chat, document, health, rag
 from app.config import get_settings
 from app.core.langgraph.graph import build_chat_graph
 from app.core.langgraph.model import build_router_model_fn
+from app.core.rag.bm25_registry import TenantBm25Registry
 from app.infrastructure.database.session import configure_session, init_engine
 from app.infrastructure.logging.setup import configure_logging
 from app.infrastructure.vectordb.factory import build_vector_store
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     configure_session(engine)
     app.state.engine = engine
     app.state.vector_store = build_vector_store()
+    app.state.bm25_registry = TenantBm25Registry()
 
     async with AsyncExitStack() as stack:
         await _init_chat_graph(app, settings, stack)
