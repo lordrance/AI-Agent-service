@@ -1,18 +1,34 @@
 # -*- coding: utf-8 -*-
-"""多模型路由器：优先级调度、加权选择与自动降级。"""
+"""多模型路由器：优先级调度、加权选择、熔断、重试与自动降级。"""
 
 from __future__ import annotations
 
+import asyncio
 import random
 from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
-from openai import APIError, AsyncOpenAI, RateLimitError
+from openai import APIError, APIStatusError, AsyncOpenAI, RateLimitError
 from pydantic import BaseModel
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.infrastructure.llm.circuit_breaker import CircuitBreaker
 from app.infrastructure.llm.types import ModelProvider
+from app.infrastructure.metrics.prometheus import record_llm_call
+from app.infrastructure.trace.genai_otel import genai_span, record_llm_usage
+
+_TRANSIENT_ERRORS = (RateLimitError, APIError, APIStatusError, TimeoutError, asyncio.TimeoutError)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return True
+    if isinstance(exc, RateLimitError):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code in (408, 429, 500, 502, 503, 504)
+    return isinstance(exc, APIError)
 
 
 class LLMResponse(BaseModel):
@@ -22,6 +38,7 @@ class LLMResponse(BaseModel):
     model_id: str = ""
     usage: dict[str, Any] | None = None
     raw: dict[str, Any] | None = None
+    finish_reason: str | None = None
 
 
 @dataclass
@@ -46,11 +63,17 @@ class ModelRouter:
         *,
         failure_threshold: int = 5,
         recovery_timeout: float = 60.0,
+        request_timeout: float = 60.0,
+        max_tokens_cap: int | None = None,
+        retry_attempts: int = 3,
     ) -> None:
         if not model_configs:
             raise ValueError("model_configs 不能为空")
 
         self._configs = sorted(model_configs, key=lambda c: c.priority)
+        self._request_timeout = max(1.0, request_timeout)
+        self._max_tokens_cap = max_tokens_cap
+        self._retry_attempts = max(1, retry_attempts)
         self._breakers: dict[str, CircuitBreaker] = {}
         for cfg in self._configs:
             self._breakers[cfg.model_id] = CircuitBreaker(
@@ -82,7 +105,6 @@ class ModelRouter:
         ordered: list[ModelConfig] = []
         for prio in sorted(by_prio.keys()):
             group = by_prio[prio]
-            # 同优先级内按权重做随机排序（权重越大越容易被排到前面）
             scored = [
                 (cfg, random.random() ** (1.0 / max(cfg.weight, 0.01)))
                 for cfg in group
@@ -105,26 +127,69 @@ class ModelRouter:
             breaker = self._breakers[cfg.model_id]
             try:
                 return await breaker.call(
-                    self._try_model,
+                    self._invoke_with_resilience,
                     cfg.model_id,
                     messages,
                     **kwargs,
                 )
             except RuntimeError as exc:
-                # 熔断打开
                 last_error = exc
                 logger.warning("模型 [{}] 被熔断跳过: {}", cfg.model_id, exc)
-            except (TimeoutError, APIError, RateLimitError) as exc:
+                record_llm_call(cfg.model_id, success=False)
+            except _TRANSIENT_ERRORS as exc:
                 last_error = exc
                 logger.warning("模型 [{}] 调用失败，尝试降级: {}", cfg.model_id, exc)
+                record_llm_call(cfg.model_id, success=False)
             except Exception as exc:
                 last_error = exc
                 logger.exception("模型 [{}] 未预期错误: {}", cfg.model_id, exc)
+                record_llm_call(cfg.model_id, success=False)
 
         msg = "所有候选模型均不可用"
         if last_error:
             raise RuntimeError(msg) from last_error
         raise RuntimeError(msg)
+
+    async def _invoke_with_resilience(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """带 OTel span、超时、tenacity 重试的模型调用。"""
+        with genai_span("gen_ai.chat", model=model_id) as span:
+            response = await self._call_with_retry(model_id, messages, **kwargs)
+            finish = response.finish_reason or "stop"
+            record_llm_usage(
+                span,
+                model_id=model_id,
+                usage=response.usage,
+                finish_reason=finish,
+            )
+            record_llm_call(model_id, success=True, usage=response.usage)
+            return response
+
+    async def _call_with_retry(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> LLMResponse:
+        attempts = self._retry_attempts
+
+        @retry(
+            stop=stop_after_attempt(attempts),
+            wait=wait_exponential(multiplier=0.5, min=0.5, max=8),
+            retry=retry_if_exception(_is_retryable),
+            reraise=True,
+        )
+        async def _inner() -> LLMResponse:
+            return await asyncio.wait_for(
+                self._try_model(model_id, messages, **kwargs),
+                timeout=self._request_timeout,
+            )
+
+        return await _inner()
 
     async def _try_model(
         self,
@@ -132,10 +197,15 @@ class ModelRouter:
         messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> LLMResponse:
-        """尝试调用指定模型（经熔断器包装，不在此处重复熔断逻辑）。"""
+        """调用指定 OpenAI 兼容模型。"""
         client = self._clients[model_id]
         temperature = kwargs.pop("temperature", 0.7)
         max_tokens = kwargs.pop("max_tokens", None)
+        if self._max_tokens_cap is not None:
+            if max_tokens is None:
+                max_tokens = self._max_tokens_cap
+            else:
+                max_tokens = min(int(max_tokens), self._max_tokens_cap)
 
         params: dict[str, Any] = {
             "model": model_id,
@@ -146,14 +216,11 @@ class ModelRouter:
             params["max_tokens"] = max_tokens
         params.update(kwargs)
 
-        try:
-            resp = await client.chat.completions.create(**params)
-        except Exception:
-            logger.exception("OpenAI 兼容接口调用失败 model_id={}", model_id)
-            raise
+        resp = await client.chat.completions.create(**params)
 
         choice = resp.choices[0] if resp.choices else None
         content = (choice.message.content or "") if choice else ""
+        finish_reason = getattr(choice, "finish_reason", None) if choice else None
         usage = None
         if resp.usage:
             usage = {
@@ -167,4 +234,5 @@ class ModelRouter:
             model_id=model_id,
             usage=usage,
             raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
+            finish_reason=str(finish_reason) if finish_reason else None,
         )

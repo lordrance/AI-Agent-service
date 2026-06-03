@@ -73,8 +73,11 @@ jobs:
       - name: Ruff format check
         run: ruff format --check app tests scripts
 
-      - name: Mypy (guardrails + auth + circuit breaker)
-        run: mypy app/core/guardrails app/api/auth.py app/api/context.py app/infrastructure/llm/circuit_breaker.py
+      - name: Mypy (observability + auth + guardrails)
+        run: >-
+          mypy app/core/guardrails app/api/auth.py app/api/context.py
+          app/infrastructure/llm/circuit_breaker.py app/infrastructure/trace/genai_otel.py
+          app/infrastructure/llm/factory.py
 
       - name: Pytest
         run: pytest tests/ -v --tb=short -q

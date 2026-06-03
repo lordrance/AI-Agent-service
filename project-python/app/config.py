@@ -118,6 +118,29 @@ class Settings(BaseSettings):
     # 护栏
     guardrails_enabled: bool = Field(default=True, description="是否在 API 链路启用护栏")
 
+    # Epic 4 — 可观测性与韧性
+    otel_enabled: bool = Field(default=False, description="是否启用 OpenTelemetry GenAI span")
+    otel_service_name: str = Field(default="enterprise-ai-agent", description="OTel 服务名")
+    prometheus_enabled: bool = Field(default=True, description="是否暴露 /metrics")
+    llm_timeout_seconds: float = Field(default=60.0, description="单次 LLM HTTP 调用超时（秒）")
+    llm_max_tokens_per_request: int | None = Field(
+        default=4096,
+        description="单次请求 max_tokens 上限（None 表示不限制）",
+    )
+    llm_retry_max_attempts: int = Field(default=3, description="可重试错误的最大尝试次数")
+    llm_fallback_models: str = Field(
+        default="",
+        description="降级模型列表（逗号分隔），优先级低于 OPENAI_MODEL",
+    )
+    circuit_breaker_failure_threshold: int = Field(default=5, description="熔断失败阈值")
+    circuit_breaker_recovery_timeout: float = Field(
+        default=60.0,
+        description="熔断恢复等待（秒）",
+    )
+
+    def fallback_model_list(self) -> list[str]:
+        return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

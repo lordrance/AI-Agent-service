@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from loguru import logger
 from openai import AsyncOpenAI
 
-from app.api.context import build_thread_id
+from app.api.context import build_thread_id, set_session_id, set_trace_id
 from app.config import get_settings
 from app.core.guardrails.pipeline import guard_input_text, guard_output_text
 from app.core.intent.recognizer import IntentRecognizer
@@ -53,6 +53,8 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         raise HTTPException(status_code=503, detail="未配置 OPENAI_API_KEY，对话图不可用")
 
     trace_id = str(uuid.uuid4())
+    set_trace_id(trace_id)
+    set_session_id(request.conversation_id)
     span = _tracer.start_trace(trace_id, "chat")
 
     settings = get_settings()

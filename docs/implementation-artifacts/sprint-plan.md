@@ -36,11 +36,11 @@
 
 > 说明：`AUTH_ENABLED=false`（默认）时匿名访问，便于本地/CI；生产设 `AUTH_ENABLED=true` 并配置 `API_KEYS` 或 `JWT_SECRET`。
 
-## Epic 4 — 可观测性与韧性（P2）
-- [ ] S4.1 OTel GenAI 语义约定埋点（模型/工具/检索 span + token/cost）。
-- [ ] S4.2 Langfuse 接入完善；结构化日志带 trace/session/tenant id。
-- [ ] S4.3 Prometheus 指标 + `/health/ready` 依赖探针。
-- [ ] S4.4 统一超时/递归/token 预算 + tenacity 重试 + 模型降级。
+## Epic 4 — 可观测性与韧性（P2）✅ 已完成
+- [x] S4.1 OTel GenAI 语义约定埋点（`genai_otel.py`：chat/retrieval/tool + token）。验证：`tests/test_s4_1_otel.py`。
+- [x] S4.2 Langfuse 导出含 tenant/session/request；loguru 结构化字段。验证：导出 metadata + 日志 patcher。
+- [x] S4.3 Prometheus `/api/v1/metrics` + HTTP/LLM/工具指标；`/health/ready` 检查 DB/Redis/pgvector。验证：`tests/test_s4_3_observability.py`。
+- [x] S4.4 `ModelRouter`：tenacity 重试、调用超时、max_tokens 上限、`LLM_FALLBACK_MODELS` 降级链。验证：`tests/test_s4_4_resilience.py`。
 
 ## Epic 5 — 部署与扩展（P3）
 - [ ] S5.1 生产 Dockerfile（多阶段/非 root/healthcheck）+ gunicorn 多 worker + 优雅停机。

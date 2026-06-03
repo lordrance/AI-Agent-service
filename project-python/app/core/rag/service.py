@@ -14,6 +14,8 @@ from loguru import logger
 from app.core.rag.generator import RAGGenerator
 from app.core.rag.reranker import Reranker
 from app.infrastructure.embeddings.base import Embedder
+from app.infrastructure.metrics.prometheus import record_rag_retrieval
+from app.infrastructure.trace.genai_otel import genai_span, record_retrieval
 from app.infrastructure.vectordb.base import VectorStore
 from app.models.schemas import RAGResponse, RetrievalResult
 
@@ -37,24 +39,33 @@ class RagService:
 
     async def retrieve(self, query: str, top_k: int = 10) -> list[RetrievalResult]:
         """向量检索（可选重排），返回 RetrievalResult 列表。"""
-        vector = await asyncio.to_thread(self._embedder.embed_query, query)
-        hits = await self._vs.search(vector, top_k=top_k)
-        results = [
-            RetrievalResult(
-                id=h.id,
-                content=h.content,
-                score=h.score,
-                metadata={**h.metadata, "document_id": h.document_id},
-                source="vector",
-            )
-            for h in hits
-        ]
-        if self._reranker is not None and results:
+        with genai_span("gen_ai.retrieval") as span:
             try:
-                results = await self._reranker.rerank(query, results, top_k=self._rerank_top_k)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("重排失败，回退原始检索顺序: {}", exc)
-        return results
+                vector = await asyncio.to_thread(self._embedder.embed_query, query)
+                hits = await self._vs.search(vector, top_k=top_k)
+                results = [
+                    RetrievalResult(
+                        id=h.id,
+                        content=h.content,
+                        score=h.score,
+                        metadata={**h.metadata, "document_id": h.document_id},
+                        source="vector",
+                    )
+                    for h in hits
+                ]
+                if self._reranker is not None and results:
+                    try:
+                        results = await self._reranker.rerank(
+                            query, results, top_k=self._rerank_top_k
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("重排失败，回退原始检索顺序: {}", exc)
+                record_retrieval(span, hit_count=len(results))
+                record_rag_retrieval(success=True)
+                return results
+            except Exception:
+                record_rag_retrieval(success=False)
+                raise
 
     async def answer(
         self,

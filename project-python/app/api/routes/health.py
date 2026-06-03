@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
-"""健康检查：进程存活与依赖探测。"""
+"""健康检查：进程存活、依赖就绪与 Prometheus 指标。"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from loguru import logger
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.rate_limit import limiter
 from app.config import get_settings
 from app.infrastructure.database.session import get_async_session
+from app.infrastructure.health.probes import check_database, check_redis, check_vector_store
+from app.infrastructure.metrics.prometheus import metrics_payload
 
 router = APIRouter(tags=["health"])
 
@@ -30,17 +31,37 @@ async def health_ready(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> dict[str, Any]:
-    """就绪探针：检查数据库连通性。"""
+    """就绪探针：数据库、Redis、向量库（pgvector）。"""
     settings = get_settings()
+    db_ok = await check_database(session)
+    redis_ok = await check_redis(settings)
+    vector_ok = False
     try:
-        await session.execute(text("SELECT 1"))
-        db_ok = True
+        vector_ok = await check_vector_store(request.app.state.vector_store)
     except Exception as exc:
-        logger.warning("数据库就绪检查失败: {}", exc)
-        db_ok = False
+        logger.warning("向量库状态读取失败: {}", exc)
 
-    return {
-        "status": "ready" if db_ok else "degraded",
+    checks = {
         "database": "up" if db_ok else "down",
+        "redis": "up" if redis_ok else "down",
+        "vector_store": "up" if vector_ok else "down",
+    }
+    all_ok = all(v == "up" for v in checks.values())
+    return {
+        "status": "ready" if all_ok else "degraded",
+        **checks,
         "app_env": settings.app_env,
     }
+
+
+@router.get("/metrics")
+@limiter.exempt
+async def metrics(request: Request) -> Response:
+    """Prometheus 指标（无需鉴权）。"""
+    settings = get_settings()
+    if not settings.prometheus_enabled:
+        return Response(status_code=404, content="metrics disabled")
+    return Response(
+        content=metrics_payload(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )

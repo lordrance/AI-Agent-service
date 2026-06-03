@@ -9,13 +9,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 
+from app.api.context import set_trace_id
 from app.config import get_settings
 from app.core.guardrails.pipeline import guard_input_text, guard_output_text
 from app.core.rag.generator import RAGGenerator
 from app.core.rag.reranker import Reranker
 from app.core.rag.service import RagService
 from app.infrastructure.embeddings import get_embedder
-from app.infrastructure.llm.model_router import ModelConfig, ModelRouter
+from app.infrastructure.llm.factory import build_model_router
+from app.infrastructure.llm.model_router import ModelRouter
 from app.infrastructure.trace.tracer import Tracer
 from app.infrastructure.vectordb.base import VectorStore
 from app.models.schemas import RagQueryRequest, RAGResponse
@@ -42,17 +44,9 @@ class _RouterLLM:
 def _build_generator() -> RAGGenerator | None:
     """有 API Key 时构造生成器；否则返回 None（仅检索）。"""
     settings = get_settings()
-    if not settings.openai_api_key:
+    router = build_model_router()
+    if router is None:
         return None
-    router = ModelRouter(
-        [
-            ModelConfig(
-                model_id=settings.openai_model,
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_api_base or None,
-            )
-        ]
-    )
     return RAGGenerator(llm=_RouterLLM(router), model_name=settings.openai_model)
 
 
@@ -72,6 +66,7 @@ async def rag_query(
     settings = get_settings()
     top_k = request.top_k or settings.rag_top_k
     trace_id = str(uuid.uuid4())
+    set_trace_id(trace_id)
     span = _tracer.start_trace(trace_id, "rag_query")
 
     query = request.query

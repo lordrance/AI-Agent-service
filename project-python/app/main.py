@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.core.langgraph.graph import build_chat_graph
 from app.core.langgraph.model import build_router_model_fn
 from app.infrastructure.database.session import configure_session, init_engine
+from app.infrastructure.logging.setup import configure_logging
 from app.infrastructure.vectordb.factory import build_vector_store
 from app.infrastructure.vectordb.pgvector_store import _to_asyncpg_dsn
 
@@ -67,6 +68,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging()
     application = FastAPI(
         title=settings.app_name,
         debug=settings.debug,

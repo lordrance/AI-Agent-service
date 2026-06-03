@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 
 from app.config import get_settings
 from app.core.langgraph.graph import ModelFn
-from app.infrastructure.llm.model_router import ModelConfig, ModelRouter
+from app.infrastructure.llm.factory import build_model_router
 
 _ROLE_MAP = {"human": "user", "ai": "assistant", "system": "system", "tool": "tool"}
 
@@ -26,15 +26,9 @@ def build_router_model_fn() -> ModelFn | None:
     if not settings.openai_api_key:
         return None
 
-    router = ModelRouter(
-        [
-            ModelConfig(
-                model_id=settings.openai_model,
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_api_base or None,
-            )
-        ]
-    )
+    router = build_model_router()
+    if router is None:
+        return None
 
     async def model_fn(messages: list[BaseMessage]) -> BaseMessage:
         resp = await router.chat(_to_openai_messages(messages))

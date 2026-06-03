@@ -45,11 +45,17 @@ class ToolRegistry:
             tool = self.get_tool(name)
         except KeyError as exc:
             return f"错误：{exc}"
-        try:
-            result = await tool.execute(**(arguments or {}))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("工具 [{}] 执行失败", name)
-            return f"工具执行异常: {exc}"
+        from app.infrastructure.metrics.prometheus import record_tool
+        from app.infrastructure.trace.genai_otel import genai_span
+
+        with genai_span("gen_ai.execute_tool", tool_name=name):
+            try:
+                result = await tool.execute(**(arguments or {}))
+                record_tool(name, success=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("工具 [{}] 执行失败", name)
+                record_tool(name, success=False)
+                return f"工具执行异常: {exc}"
         return result if isinstance(result, str) else str(result)
 
     def get_tools_description(self) -> str:

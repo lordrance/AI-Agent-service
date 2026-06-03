@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 _tenant_ctx: ContextVar[TenantContext | None] = ContextVar("tenant_context", default=None)
 _request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
+_trace_id_ctx: ContextVar[str | None] = ContextVar("trace_id", default=None)
+_session_id_ctx: ContextVar[str | None] = ContextVar("session_id", default=None)
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,22 @@ def set_request_id(request_id: str | None) -> None:
 
 def get_request_id() -> str | None:
     return _request_id_ctx.get()
+
+
+def set_trace_id(trace_id: str | None) -> None:
+    _trace_id_ctx.set(trace_id)
+
+
+def get_trace_id() -> str | None:
+    return _trace_id_ctx.get()
+
+
+def set_session_id(session_id: str | None) -> None:
+    _session_id_ctx.set(session_id)
+
+
+def get_session_id() -> str | None:
+    return _session_id_ctx.get()
 
 
 def build_thread_id(conversation_or_session: str | None, *, prefix: str = "") -> str:

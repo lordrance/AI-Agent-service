@@ -11,13 +11,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from app.api.context import build_thread_id
+from app.api.context import build_thread_id, set_session_id, set_trace_id
 from app.config import get_settings
 from app.core.agent.react_agent import ReActAgent
 from app.core.guardrails.pipeline import guard_input_text, guard_output_text
 from app.core.tools.builtin import CalculatorTool, WebSearchTool
 from app.core.tools.registry import ToolRegistry
-from app.infrastructure.llm.model_router import ModelConfig, ModelRouter
+from app.infrastructure.llm.factory import build_model_router
+from app.infrastructure.llm.model_router import ModelRouter
 from app.infrastructure.trace.tracer import Tracer
 from app.models.schemas import AgentRequest, AgentResponse
 
@@ -45,18 +46,9 @@ def _build_registry() -> ToolRegistry:
 
 
 def _build_llm() -> _ReactLLM:
-    settings = get_settings()
-    if not settings.openai_api_key:
+    model_router = build_model_router()
+    if model_router is None:
         raise HTTPException(status_code=503, detail="未配置 OPENAI_API_KEY，Agent 不可用")
-    model_router = ModelRouter(
-        [
-            ModelConfig(
-                model_id=settings.openai_model,
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_api_base or None,
-            )
-        ]
-    )
     return _ReactLLM(model_router)
 
 
@@ -69,6 +61,8 @@ async def run_agent(request: AgentRequest) -> AgentResponse:
     max_steps = request.max_steps or settings.agent_max_steps
     session_id = build_thread_id(request.session_id or str(uuid.uuid4()))
     trace_id = str(uuid.uuid4())
+    set_trace_id(trace_id)
+    set_session_id(request.session_id)
     span = _tracer.start_trace(trace_id, "agent")
 
     user_input = request.input

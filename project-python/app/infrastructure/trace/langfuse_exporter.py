@@ -6,14 +6,31 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from app.api.context import get_request_id, get_session_id, get_tenant, get_trace_id
 from app.config import get_settings
 
 if TYPE_CHECKING:
     from app.infrastructure.trace.tracer import TraceRecord
+
+
+def _observability_metadata() -> dict[str, Any]:
+    """结构化导出：租户 / 请求 / 会话上下文。"""
+    tenant = get_tenant()
+    meta: dict[str, Any] = {
+        "request_id": get_request_id(),
+        "trace_id": get_trace_id(),
+        "session_id": get_session_id(),
+    }
+    if tenant:
+        meta["tenant_id"] = tenant.tenant_id
+        meta["auth_method"] = tenant.auth_method
+        if tenant.subject:
+            meta["subject"] = tenant.subject
+    return {k: v for k, v in meta.items() if v}
 
 
 def export_trace(trace_id: str, record: TraceRecord | None) -> None:
@@ -40,26 +57,36 @@ def export_trace(trace_id: str, record: TraceRecord | None) -> None:
             secret_key=settings.langfuse_secret_key or None,
             host=settings.langfuse_host or None,
         )
-        trace = client.trace(id=trace_id, name="agent")
+        meta = _observability_metadata()
+        trace = client.trace(
+            id=trace_id,
+            name="agent",
+            user_id=str(meta.get("tenant_id")) if meta.get("tenant_id") else None,
+            session_id=str(meta.get("session_id")) if meta.get("session_id") else None,
+            metadata=meta,
+        )
         for span in record.spans:
             duration_s = None
             if span.end_time is not None:
                 duration_s = span.end_time - span.start_time
+            span_meta: dict[str, Any] = {
+                "span_id": span.span_id,
+                "parent_span_id": span.parent_span_id,
+                "result": span.result,
+                "error": span.error,
+                "duration_s": duration_s,
+                **meta,
+            }
             trace.span(
                 name=span.operation,
-                metadata={
-                    "span_id": span.span_id,
-                    "parent_span_id": span.parent_span_id,
-                    "result": span.result,
-                    "error": span.error,
-                    "duration_s": duration_s,
-                },
+                metadata=span_meta,
             )
         client.flush()
         logger.debug(
-            "已导出 trace 到 Langfuse trace_id={} spans={}",
+            "已导出 trace 到 Langfuse trace_id={} spans={} tenant={}",
             trace_id,
             len(record.spans),
+            meta.get("tenant_id"),
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("导出 Langfuse 失败（已忽略）trace_id={}: {}", trace_id, exc)

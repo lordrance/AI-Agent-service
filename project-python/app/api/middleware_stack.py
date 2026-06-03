@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -20,6 +21,7 @@ def _is_public_path(path: str) -> bool:
     public_suffixes = (
         "/health",
         "/health/ready",
+        "/metrics",
         "/docs",
         "/redoc",
         "/openapi.json",
@@ -118,8 +120,33 @@ class MaxBodySizeMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class PrometheusMiddleware(BaseHTTPMiddleware):
+    """记录 HTTP 请求计数与延迟（Prometheus）。"""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        settings = get_settings()
+        if not settings.prometheus_enabled:
+            return await call_next(request)
+
+        from app.infrastructure.metrics.prometheus import HTTP_LATENCY, HTTP_REQUESTS
+
+        start = time.perf_counter()
+        response = await call_next(request)
+        elapsed = time.perf_counter() - start
+        endpoint = request.url.path
+        HTTP_REQUESTS.labels(
+            method=request.method,
+            endpoint=endpoint,
+            status=str(response.status_code),
+        ).inc()
+        HTTP_LATENCY.labels(method=request.method, endpoint=endpoint).observe(elapsed)
+        return response
+
+
 def configure_middleware(application: FastAPI, settings: Settings) -> None:
     """按顺序注册中间件（后注册的先执行）。"""
     application.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.max_request_body_bytes)
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(RequestContextMiddleware)
+    if settings.prometheus_enabled:
+        application.add_middleware(PrometheusMiddleware)
