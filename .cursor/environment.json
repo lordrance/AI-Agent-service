@@ -1,0 +1,15 @@
+{
+  "name": "ai-agent-service",
+  "install": "bash .cursor/install.sh",
+  "start": "sudo service postgresql start 2>/dev/null || sudo pg_ctlcluster 16 main start 2>/dev/null || true; sudo service redis-server start 2>/dev/null || true",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "cd project-python && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+      "description": "FastAPI 开发服务器（端口 8000）。需在 Secrets 配置 OPENAI_API_KEY 后 /chat、/rag、/agent 才可真正调用模型；未配置时其余链路与测试不受影响。"
+    }
+  ],
+  "ports": [
+    { "name": "api", "port": 8000 }
+  ]
+}
