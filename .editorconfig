@@ -1,0 +1,59 @@
+# EditorConfig — https://editorconfig.org
+# Cross-editor defaults so Claude-generated files and human-written files
+# don't fight over indentation, line endings, or trailing whitespace.
+
+root = true
+
+# ---------------------------------------------------------------------------
+# Universal defaults
+# ---------------------------------------------------------------------------
+[*]
+charset                  = utf-8
+end_of_line              = lf
+insert_final_newline     = true
+trim_trailing_whitespace = true
+indent_style             = space
+indent_size              = 2
+
+# ---------------------------------------------------------------------------
+# Per-language overrides
+# ---------------------------------------------------------------------------
+
+# Python — PEP 8 default
+[*.py]
+indent_size = 4
+
+# Markdown — trailing two spaces is meaningful (forced line break)
+[*.md]
+trim_trailing_whitespace = false
+
+# YAML — 2-space indent is the de-facto standard
+[*.{yml,yaml}]
+indent_size = 2
+
+# JSON / JSONC
+[*.{json,jsonc}]
+indent_size = 2
+
+# JavaScript / TypeScript ecosystem
+[*.{js,jsx,ts,tsx,mjs,cjs}]
+indent_size = 2
+
+# Shell scripts — 2 spaces, never tabs
+[*.{sh,bash,zsh}]
+indent_size = 2
+
+# Makefiles MUST use real tabs — EditorConfig has to respect this
+[Makefile]
+indent_style = tab
+
+[*.{mk,Makefile.*}]
+indent_style = tab
+
+# Go MUST use tabs
+[*.go]
+indent_style = tab
+
+# Windows batch scripts use CRLF
+[*.{bat,cmd,ps1}]
+end_of_line = crlf

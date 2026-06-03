@@ -1,0 +1,28 @@
+# General
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/
+.idea/
+.claude/settings.local.json
+
+# BMAD runtime artifacts — generated per-project, not for the template
+_bmad-output/
+# Defensive against a known installer quirk that may literally create this dir name
+{output_folder}/
+
+# Python (BMAD may use it)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+.playwright/
