@@ -1,0 +1,5 @@
+{"id": "rag-001", "question": "公司总部在哪里？", "contexts": ["公司总部位于上海浦东新区张江高科技园区。"], "ground_truth": "上海", "expected_doc_ids": ["doc-hq-1"]}
+{"id": "rag-002", "question": "退款政策是多少天？", "contexts": ["未激活会员可在购买后 7 日内申请全额退款。", "企业客户请联系客户经理单独协商。"], "ground_truth": "7天", "expected_doc_ids": ["doc-refund-1"]}
+{"id": "rag-003", "question": "API 速率限制是多少？", "contexts": ["免费套餐每分钟 60 次请求；Pro 套餐每分钟 600 次。"], "ground_truth": "60", "expected_doc_ids": ["doc-api-1"]}
+{"id": "rag-004", "question": "是否支持 SSO？", "contexts": ["企业版支持 SAML 2.0 与 OIDC 单点登录。"], "ground_truth": "支持", "expected_doc_ids": ["doc-sso-1"]}
+{"id": "rag-005", "question": "客服电话是多少？", "contexts": ["文档未提供客服电话号码，请通过应用内工单联系支持团队。"], "ground_truth": "未提及", "expected_doc_ids": ["doc-support-1"], "should_refuse": true}

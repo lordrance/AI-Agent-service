@@ -1,0 +1,5 @@
+# Optional dependencies for RAG golden-set evaluation (US NG eval practice)
+# Install: pip install -r requirements-eval.txt
+ragas>=0.1.9
+datasets>=2.14.0
+langfuse>=2.0.0
