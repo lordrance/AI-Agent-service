@@ -7,7 +7,7 @@ import asyncio
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,17 +15,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.etl import ETLPipeline
 from app.infrastructure.database.models import Document, DocumentChunk
 from app.infrastructure.database.session import get_async_session
+from app.infrastructure.embeddings import get_embedder
+from app.infrastructure.vectordb.base import VectorRecord, VectorStore
 from app.models.schemas import DocumentInfo, DocumentUploadResponse
 
 router = APIRouter(tags=["documents"])
+
+
+def get_vector_store(request: Request) -> VectorStore:
+    """从应用状态获取向量库单例（在 lifespan 中创建）。"""
+    return request.app.state.vector_store
 
 
 @router.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(..., description="上传的文件"),
     session: AsyncSession = Depends(get_async_session),
+    vector_store: VectorStore = Depends(get_vector_store),
 ) -> DocumentUploadResponse:
-    """上传文档并执行 ETL 分块后写入数据库。"""
+    """上传文档：ETL 分块 → 嵌入并写入向量库 → 落库元数据与 vector_id。"""
     upload_root = Path("uploads")
     upload_root.mkdir(parents=True, exist_ok=True)
 
@@ -51,6 +59,30 @@ async def upload_document(
         logger.exception("ETL 失败: {}", exc)
         raise HTTPException(status_code=422, detail=f"文档解析失败: {exc!s}") from exc
 
+    chunk_ids = [str(uuid.uuid4()) for _ in etl.chunks]
+
+    # 嵌入并写入向量库；失败则不落库，保持 DB 与向量库一致
+    if etl.chunks:
+        try:
+            embedder = get_embedder()
+            embeddings = await asyncio.to_thread(embedder.embed_documents, etl.chunks)
+            records = [
+                VectorRecord(
+                    id=cid,
+                    content=text[:65000],
+                    embedding=emb,
+                    document_id=doc_id,
+                    metadata={"chunk_index": i, "filename": safe_name},
+                )
+                for i, (cid, text, emb) in enumerate(
+                    zip(chunk_ids, etl.chunks, embeddings)
+                )
+            ]
+            await vector_store.upsert(records)
+        except Exception as exc:
+            logger.exception("文档向量化/入库失败: {}", exc)
+            raise HTTPException(status_code=502, detail=f"向量化失败: {exc!s}") from exc
+
     doc = Document(
         id=doc_id,
         filename=safe_name,
@@ -61,13 +93,13 @@ async def upload_document(
     )
     session.add(doc)
 
-    for i, chunk_text in enumerate(etl.chunks):
+    for i, (cid, chunk_text) in enumerate(zip(chunk_ids, etl.chunks)):
         chunk = DocumentChunk(
-            id=str(uuid.uuid4()),
+            id=cid,
             document_id=doc_id,
             chunk_index=i,
             content=chunk_text[:65000],
-            vector_id=None,
+            vector_id=cid,
             meta=None,
         )
         session.add(chunk)
@@ -79,7 +111,7 @@ async def upload_document(
         filename=safe_name,
         status="ready",
         chunk_count=len(etl.chunks),
-        message="上传并分块成功",
+        message="上传、分块并向量化成功",
     )
 
 

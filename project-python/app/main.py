@@ -9,6 +9,7 @@ from loguru import logger
 from app.api.routes import chat, document, health
 from app.config import get_settings
 from app.infrastructure.database.session import configure_session, init_engine
+from app.infrastructure.vectordb.factory import build_vector_store
 
 
 @asynccontextmanager
@@ -18,7 +19,9 @@ async def lifespan(app: FastAPI):
     engine = init_engine(settings.database_url)
     configure_session(engine)
     app.state.engine = engine
+    app.state.vector_store = build_vector_store()
     yield
+    await app.state.vector_store.close()
     await engine.dispose()
     logger.info("关闭 {}", settings.app_name)
 
