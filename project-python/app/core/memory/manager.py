@@ -1,12 +1,14 @@
-# -*- coding: utf-8 -*-
 """统一记忆管理：协调短期记忆与长期记忆。"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from loguru import logger
 
 from app.core.memory.long_term import LongTermMemory
 from app.core.memory.short_term import ShortTermMemory
+from app.models.enums import MessageRole
 from app.models.schemas import MemoryContext, Message
 
 
@@ -48,3 +50,29 @@ class MemoryManager:
         except Exception as e:
             logger.exception("保存短期记忆失败: {}", e)
             raise RuntimeError(f"save 失败: {e}") from e
+
+    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
+        """编排器/ReAct 适配接口：返回与查询相关的记忆片段（短期历史 + 长期召回）字符串列表。"""
+        ctx = await self.get_context(session_id, query)
+        snippets: list[str] = [
+            f"{m.role.value}: {m.content}" for m in ctx.short_term_messages
+        ]
+        snippets.extend(item.content for item in ctx.long_term_items)
+        return snippets[:limit]
+
+    async def append_turn(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """编排器/ReAct 适配接口：将一轮消息追加到短期记忆。"""
+        try:
+            role_enum = MessageRole(role)
+        except ValueError:
+            role_enum = MessageRole.ASSISTANT
+        await self.save(
+            session_id,
+            Message(role=role_enum, content=content, metadata=metadata or {}),
+        )

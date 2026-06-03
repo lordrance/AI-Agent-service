@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """将内存 Tracer 的 TraceRecord 导出到 Langfuse。
 
 设计：默认关闭（未配置则为安全 no-op）；任何 SDK 版本差异或网络错误都被吞掉并降级为日志，
@@ -17,7 +16,7 @@ if TYPE_CHECKING:
     from app.infrastructure.trace.tracer import TraceRecord
 
 
-def export_trace(trace_id: str, record: "TraceRecord | None") -> None:
+def export_trace(trace_id: str, record: TraceRecord | None) -> None:
     """将一次 Trace 的内存记录导出到 Langfuse（可选）。
 
     - 未启用 Langfuse 或无记录时直接返回；
