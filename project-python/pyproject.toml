@@ -74,3 +74,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: 需要 PostgreSQL/pgvector 或 Redis 等外部依赖",
+]

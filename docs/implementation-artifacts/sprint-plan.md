@@ -22,10 +22,12 @@
 
 > 说明：重排（Cross-Encoder）默认关闭（需 sentence-transformers）；嵌入默认用本地哈希后端（离线可跑），生产切 openai。
 
-## Epic 2 — 测试与 CI/CD（P1）
-- [ ] S2.1 单元测试：熔断/检索/记忆压缩/ReAct 解析/guardrails。
-- [ ] S2.2 集成/端到端：httpx + 依赖容器(pg/redis) 跑四条链路。
-- [ ] S2.3 GitHub Actions：ruff + mypy + pytest + RAG 评估门禁 + 镜像构建 + 依赖安全扫描。
+## Epic 2 — 测试与 CI/CD（P1）✅ 已完成
+- [x] S2.1 单元测试：熔断/检索/记忆压缩/ReAct 解析/guardrails。验证：`tests/test_s2_1_*.py` 全通过。
+- [x] S2.2 集成/端到端：httpx + ASGI lifespan + 四条链路。验证：`tests/test_s2_2_e2e_api.py`（DB 不可达时自动 skip）。
+- [x] S2.3 GitHub Actions：`.github/workflows/ci.yml` — ruff + 增量 mypy + pytest + RAG 黄金集门禁 + Docker 构建 + pip-audit。
+
+> 说明：全量 `mypy app` 尚有历史类型债（7 文件）；CI 当前门禁 `guardrails` + `circuit_breaker`，待后续专项清理后扩至全库。
 
 ## Epic 3 — 安全与多租户（P1）
 - [ ] S3.1 API Key/JWT 鉴权 + 租户上下文贯穿。

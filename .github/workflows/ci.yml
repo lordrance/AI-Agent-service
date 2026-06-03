@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: project-python
+
+env:
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/agent_db
+  REDIS_URL: redis://localhost:6379/0
+  EMBEDDING_BACKEND: hash
+  LANGFUSE_ENABLED: "false"
+  OPENAI_API_KEY: ""
+
+jobs:
+  lint-and-test:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: project-python/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Run database migrations
+        run: alembic upgrade head
+
+      - name: Ruff lint
+        run: ruff check app tests scripts
+
+      - name: Ruff format check
+        run: ruff format --check app tests scripts
+
+      - name: Mypy (guardrails + circuit breaker; 全量 app 待技术债清理后启用)
+        run: mypy app/core/guardrails app/infrastructure/llm/circuit_breaker.py
+
+      - name: Pytest
+        run: pytest tests/ -v --tb=short -q
+
+      - name: RAG golden set (dry-run)
+        run: python scripts/eval_rag_golden.py --dry-run
+
+      - name: RAG golden set (heuristic gate)
+        run: python scripts/eval_rag_golden.py --fail-under 0.5
+
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project-python
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t enterprise-ai-agent:ci .
+
+  security-scan:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project-python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.txt --strict --desc on
