@@ -48,13 +48,19 @@ pip install -e .
 cp .env.example .env
 ```
 
-3. 启动 API（需本机或 Compose 中已启动 Postgres / Redis / Milvus 若你要联调全栈）：
+3. 初始化数据库表结构（需已启动 Postgres，连接由 `DATABASE_URL` 指定）：
+
+```bash
+alembic upgrade head
+```
+
+4. 启动 API（需本机或 Compose 中已启动 Postgres / Redis / Milvus 若你要联调全栈）：
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-4. 访问健康检查：<http://127.0.0.1:8000/api/v1/health>
+5. 访问健康检查：<http://127.0.0.1:8000/api/v1/health>
 
 ### Docker Compose
 
