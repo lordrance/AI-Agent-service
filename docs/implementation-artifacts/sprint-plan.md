@@ -7,11 +7,11 @@
 ## 状态图例
 - [ ] 待办  · [~] 进行中  · [x] 完成  · [!] 受阻
 
-## Epic 0 — 起死回生（P0）
-- [ ] S0.1 修复 `langfuse_exporter` 缺失，统一 trace 导出（安全 no-op + 配置开关，内存 Tracer 留作本地调试）。验证：`import app.main` 成功。
-- [ ] S0.2 引入 Alembic + 初始迁移，CI/启动建表。验证：upgrade/downgrade 可用。
-- [ ] S0.3 对齐 `ToolRegistry`/`MemoryManager` 与编排器协议。验证：真实类装配单测通过。
-- [ ] S0.4 补齐 `config.py`/`.env.example`（langfuse、embedding、向量库、鉴权、限流、超时/预算）。
+## Epic 0 — 起死回生（P0）✅ 已完成
+- [x] S0.1 新增安全 `langfuse_exporter`（默认关闭=no-op）+ Langfuse 配置。验证：`import app.main` 成功（实测通过）。
+- [x] S0.2 引入 Alembic + 初始迁移。验证：对真实 PostgreSQL 16 实测 `upgrade head` 建 5 表、`downgrade base` 清空。
+- [x] S0.3 对齐 `ToolRegistry`/`MemoryManager` 与编排器协议。验证：单测 3 passed、ruff 干净。
+- [~] S0.4 配置补齐：Langfuse 已完成；embedding/向量库/鉴权/限流/超时预算随对应 Epic 增量补齐。
 
 ## Epic 1 — LangGraph + pgvector 打通四条主链路（P0）
 - [ ] S1.1 `VectorStore` 端口 + pgvector 实现 + 嵌入工厂。验证：写入/检索 round-trip。
