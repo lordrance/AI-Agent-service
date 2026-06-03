@@ -15,8 +15,7 @@ from app.models.schemas import Citation, Message, RAGResponse, RetrievalResult
 class RAGLLMProtocol(Protocol):
     """支持异步生成的 LLM 接口（如 LangChain Runnable）。"""
 
-    async def ainvoke(self, input: Any, **kwargs: Any) -> Any:
-        ...
+    async def ainvoke(self, input: Any, **kwargs: Any) -> Any: ...
 
 
 class RAGGenerator:

@@ -109,16 +109,10 @@ class DocumentChunker:
                     buf = candidate
                 else:
                     if buf:
-                        merged.extend(
-                            self._chunk_recursive(
-                                buf, seps[i + 1 :], _depth=_depth + 1
-                            )
-                        )
+                        merged.extend(self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1))
                     buf = part
             if buf:
-                merged.extend(
-                    self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1)
-                )
+                merged.extend(self._chunk_recursive(buf, seps[i + 1 :], _depth=_depth + 1))
             return merged if merged else self._chunk_fixed(text)
 
         return self._chunk_fixed(text)

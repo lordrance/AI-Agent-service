@@ -47,14 +47,10 @@ class RagService:
         with genai_span("gen_ai.retrieval") as span:
             try:
                 if self._hybrid is not None:
-                    results = await self._hybrid.retrieve(
-                        query, self._tenant_id, top_k=top_k
-                    )
+                    results = await self._hybrid.retrieve(query, self._tenant_id, top_k=top_k)
                 else:
                     vector = await asyncio.to_thread(self._embedder.embed_query, query)
-                    hits = await self._vs.search(
-                        vector, top_k=top_k, namespace=self._tenant_id
-                    )
+                    hits = await self._vs.search(vector, top_k=top_k, namespace=self._tenant_id)
                     results = [
                         RetrievalResult(
                             id=h.id,

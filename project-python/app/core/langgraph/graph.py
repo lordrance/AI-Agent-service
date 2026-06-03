@@ -56,7 +56,10 @@ async def run_chat(graph, thread_id: str, messages: list[BaseMessage]) -> str:
         config={"configurable": {"thread_id": thread_id}, "recursion_limit": 10},
     )
     last = result["messages"][-1]
-    return last.content if isinstance(last, BaseMessage) else str(last)
+    if isinstance(last, BaseMessage):
+        content = last.content
+        return content if isinstance(content, str) else str(content)
+    return str(last)
 
 
 async def append_chat_messages(

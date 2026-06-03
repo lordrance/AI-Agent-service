@@ -68,8 +68,7 @@ class LLMCallable(Protocol):
 class MemoryLike(Protocol):
     """记忆系统最小接口。"""
 
-    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
-        ...
+    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]: ...
 
     async def append_turn(
         self,
@@ -77,15 +76,13 @@ class MemoryLike(Protocol):
         role: str,
         content: str,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class ToolInvoker(Protocol):
     """工具调用：按名称执行并返回字符串化观察结果。"""
 
-    async def invoke(self, name: str, arguments: dict[str, Any]) -> str:
-        ...
+    async def invoke(self, name: str, arguments: dict[str, Any]) -> str: ...
 
 
 @dataclass

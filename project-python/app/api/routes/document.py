@@ -80,9 +80,7 @@ async def upload_document(
                     document_id=doc_id,
                     metadata={"chunk_index": i, "filename": safe_name},
                 )
-                for i, (cid, text, emb) in enumerate(
-                    zip(chunk_ids, etl.chunks, embeddings)
-                )
+                for i, (cid, text, emb) in enumerate(zip(chunk_ids, etl.chunks, embeddings))
             ]
             await vector_store.upsert(records, namespace=tenant_id)
         except Exception as exc:

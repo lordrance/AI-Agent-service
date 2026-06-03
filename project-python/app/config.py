@@ -141,6 +141,10 @@ class Settings(BaseSettings):
     # Epic 4 — 可观测性与韧性
     otel_enabled: bool = Field(default=False, description="是否启用 OpenTelemetry GenAI span")
     otel_service_name: str = Field(default="enterprise-ai-agent", description="OTel 服务名")
+    otel_exporter_otlp_endpoint: str = Field(
+        default="",
+        description="OTLP 导出地址（HTTP 或 gRPC，如 http://localhost:4318/v1/traces）",
+    )
     prometheus_enabled: bool = Field(default=True, description="是否暴露 /metrics")
     llm_timeout_seconds: float = Field(default=60.0, description="单次 LLM HTTP 调用超时（秒）")
     llm_max_tokens_per_request: int | None = Field(

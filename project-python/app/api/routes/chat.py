@@ -147,8 +147,8 @@ async def _stream_generator(
     model_router = build_model_router()
 
     if model_router is None:
-        payload = json.dumps({"error": "未配置 API Key"}, ensure_ascii=False)
-        yield b"data: " + payload.encode() + b"\n\n"
+        err_line = json.dumps({"error": "未配置 API Key"}, ensure_ascii=False)
+        yield b"data: " + err_line.encode() + b"\n\n"
         return
 
     accumulated = ""
@@ -164,8 +164,8 @@ async def _stream_generator(
             accumulated += delta
             if len(accumulated) > max_buf:
                 accumulated = accumulated[:max_buf]
-            payload = {"content": delta, "trace_id": trace_id}
-            yield b"data: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+            event = {"content": delta, "trace_id": trace_id}
+            yield b"data: " + json.dumps(event, ensure_ascii=False).encode() + b"\n\n"
 
         if settings.guardrails_enabled and accumulated:
             accumulated = guard_output_text(
@@ -183,10 +183,14 @@ async def _stream_generator(
             )
 
         _tracer.end_span(span, result={"thread_id": thread_id, "mode": "stream"})
-        yield b"data: " + json.dumps(
-            {"done": True, "trace_id": trace_id},
-            ensure_ascii=False,
-        ).encode() + b"\n\n"
+        yield (
+            b"data: "
+            + json.dumps(
+                {"done": True, "trace_id": trace_id},
+                ensure_ascii=False,
+            ).encode()
+            + b"\n\n"
+        )
     except Exception as exc:
         logger.exception("chat_stream 失败: {}", exc)
         _tracer.end_span(span, error=str(exc))

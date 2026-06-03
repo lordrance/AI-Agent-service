@@ -54,9 +54,7 @@ async def test_rag_retrieve_and_generate(require_db):
 
         # 带生成器：返回答案与解析出的引用
         gen = RAGGenerator(llm=_FakeCitingLLM(), model_name="fake")
-        svc = RagService(
-            vector_store=store, embedder=emb, generator=gen, tenant_id="anonymous"
-        )
+        svc = RagService(vector_store=store, embedder=emb, generator=gen, tenant_id="anonymous")
         resp = await svc.answer("RAG 检索问答", top_k=3)
         assert "[1]" in resp.answer
         assert len(resp.citations) == 1

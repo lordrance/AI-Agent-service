@@ -53,8 +53,7 @@ class ReflectionReport:
 class ReflectionLLM(Protocol):
     """反思阶段使用的 LLM。"""
 
-    async def acomplete(self, messages: Sequence[dict[str, str]], **kwargs: Any) -> str:
-        ...
+    async def acomplete(self, messages: Sequence[dict[str, str]], **kwargs: Any) -> str: ...
 
 
 def _extract_json(text: str) -> dict[str, Any]:

@@ -27,8 +27,7 @@ OrchestrationMode = Literal["react", "plan_execute"]
 class OrchestratorConfig(Protocol):
     """编排器配置：可从 dict 或配置对象读取。"""
 
-    def get(self, key: str, default: Any = None) -> Any:
-        ...
+    def get(self, key: str, default: Any = None) -> Any: ...
 
 
 class ModelRouter(Protocol):
@@ -45,8 +44,7 @@ class ModelRouter(Protocol):
 class MemoryManager(Protocol):
     """记忆管理。"""
 
-    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
-        ...
+    async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]: ...
 
     async def append_turn(
         self,
@@ -54,34 +52,29 @@ class MemoryManager(Protocol):
         role: str,
         content: str,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class ToolRegistry(Protocol):
     """工具注册表：列举与调用。"""
 
-    def list_tool_names(self) -> list[str]:
-        ...
+    def list_tool_names(self) -> list[str]: ...
 
-    async def invoke(self, name: str, arguments: dict[str, Any]) -> str:
-        ...
+    async def invoke(self, name: str, arguments: dict[str, Any]) -> str: ...
 
 
 class Tracer(Protocol):
     """全链路追踪：span + 事件日志。"""
 
-    def new_trace_id(self) -> str:
-        ...
+    def new_trace_id(self) -> str: ...
 
-    def start_span(self, name: str, trace_id: str, attributes: dict[str, Any] | None = None) -> Any:
-        ...
+    def start_span(
+        self, name: str, trace_id: str, attributes: dict[str, Any] | None = None
+    ) -> Any: ...
 
-    def end_span(self, span: Any, error: BaseException | None = None) -> None:
-        ...
+    def end_span(self, span: Any, error: BaseException | None = None) -> None: ...
 
-    def log_event(self, trace_id: str, name: str, payload: dict[str, Any]) -> None:
-        ...
+    def log_event(self, trace_id: str, name: str, payload: dict[str, Any]) -> None: ...
 
 
 # ---------------------------------------------------------------------------

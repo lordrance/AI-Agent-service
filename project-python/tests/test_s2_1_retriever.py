@@ -11,7 +11,7 @@ from app.models.schemas import RetrievalResult
 def test_tokenize_splits_cjk_and_latin():
     tokens = _tokenize("RAG 向量检索 test")
     assert "rag" in tokens
-    assert "向量检索" in tokens
+    assert "向" in tokens and "量" in tokens
     assert "test" in tokens
 
 

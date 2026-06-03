@@ -106,10 +106,7 @@ class ModelRouter:
         ordered: list[ModelConfig] = []
         for prio in sorted(by_prio.keys()):
             group = by_prio[prio]
-            scored = [
-                (cfg, random.random() ** (1.0 / max(cfg.weight, 0.01)))
-                for cfg in group
-            ]
+            scored = [(cfg, random.random() ** (1.0 / max(cfg.weight, 0.01))) for cfg in group]
             scored.sort(key=lambda x: -x[1])
             ordered.extend(cfg for cfg, _ in scored)
         return ordered or list(self._configs)

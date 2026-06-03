@@ -63,9 +63,7 @@ class HybridRetriever:
         helper._rrf_k = self._rrf_k
         return helper._rrf_fuse(lists, top_k)
 
-    async def _vector_search(
-        self, query: str, tenant_id: str, top_k: int
-    ) -> list[RetrievalResult]:
+    async def _vector_search(self, query: str, tenant_id: str, top_k: int) -> list[RetrievalResult]:
         vector = await asyncio.to_thread(self._embedder.embed_query, query)
         hits = await self._vs.search(vector, top_k=top_k, namespace=tenant_id)
         return [

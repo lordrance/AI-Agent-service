@@ -3,3 +3,8 @@
 {"id": "rag-003", "question": "API 速率限制是多少？", "contexts": ["免费套餐每分钟 60 次请求；Pro 套餐每分钟 600 次。"], "ground_truth": "60", "expected_doc_ids": ["doc-api-1"]}
 {"id": "rag-004", "question": "是否支持 SSO？", "contexts": ["企业版支持 SAML 2.0 与 OIDC 单点登录。"], "ground_truth": "支持", "expected_doc_ids": ["doc-sso-1"]}
 {"id": "rag-005", "question": "客服电话是多少？", "contexts": ["文档未提供客服电话号码，请通过应用内工单联系支持团队。"], "ground_truth": "未提及", "expected_doc_ids": ["doc-support-1"], "should_refuse": true}
+{"id": "rag-006", "question": "数据保留多久？", "contexts": ["用户日志默认保留 90 天，企业客户可配置延长至 365 天。"], "ground_truth": "90", "expected_doc_ids": ["doc-retention-1"]}
+{"id": "rag-007", "question": "支持哪些嵌入模型？", "contexts": ["平台支持 OpenAI text-embedding-3-small 与兼容 API 的自定义嵌入端点。"], "ground_truth": "embedding", "expected_doc_ids": ["doc-embed-1"]}
+{"id": "rag-008", "question": "免费版有 SLA 吗？", "contexts": ["免费版不提供 SLA；企业版提供 99.9% 月度可用性承诺。"], "ground_truth": "不提供", "expected_doc_ids": ["doc-sla-1"]}
+{"id": "rag-009", "question": "向量维度默认多少？", "contexts": ["默认嵌入维度为 1536，须与向量索引创建时一致。"], "ground_truth": "1536", "expected_doc_ids": ["doc-dim-1"]}
+{"id": "rag-010", "question": "是否支持多租户？", "contexts": ["API 通过租户 ID 隔离文档与向量 namespace，支持 API Key 与 JWT 鉴权。"], "ground_truth": "租户", "expected_doc_ids": ["doc-tenant-1"]}

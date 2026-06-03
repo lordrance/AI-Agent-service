@@ -18,6 +18,8 @@ env:
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/agent_db
   REDIS_URL: redis://localhost:6379/0
   EMBEDDING_BACKEND: hash
+  VECTOR_STORE: pgvector
+  RAG_HYBRID_ENABLED: "true"
   LANGFUSE_ENABLED: "false"
   OPENAI_API_KEY: ""
 
@@ -85,8 +87,8 @@ jobs:
       - name: RAG golden set (dry-run)
         run: python scripts/eval_rag_golden.py --dry-run
 
-      - name: RAG golden set (heuristic gate)
-        run: python scripts/eval_rag_golden.py --fail-under 0.5
+      - name: RAG golden set (real pipeline, fail-under 0.8)
+        run: python scripts/eval_rag_golden.py --mode pipeline --fail-under 0.8
 
   docker-build:
     name: Docker image build

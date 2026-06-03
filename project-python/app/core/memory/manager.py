@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from loguru import logger
 
-from app.core.memory.long_term import LongTermMemory
 from app.core.memory.short_term import ShortTermMemory
 from app.models.enums import MessageRole
 from app.models.schemas import MemoryContext, Message
 
 
+@runtime_checkable
+class LongTermMemoryLike(Protocol):
+    async def store(self, session_id: str, content: str, metadata: dict[str, Any]) -> str: ...
+
+    async def recall(self, query: str, session_id: str, top_k: int = 5) -> list[Any]: ...
+
+    async def forget(self, memory_id: str) -> None: ...
+
+
 class MemoryManager:
     """统一记忆管理器：协调短期记忆和长期记忆。"""
 
-    def __init__(self, short_term: ShortTermMemory, long_term: LongTermMemory) -> None:
+    def __init__(self, short_term: ShortTermMemory, long_term: LongTermMemoryLike) -> None:
         """
         :param short_term: 短期记忆实现（Redis + 窗口）
         :param long_term: 长期记忆实现（向量库）
@@ -54,9 +62,7 @@ class MemoryManager:
     async def get_relevant(self, session_id: str, query: str, limit: int = 8) -> list[str]:
         """编排器/ReAct 适配接口：返回与查询相关的记忆片段（短期历史 + 长期召回）字符串列表。"""
         ctx = await self.get_context(session_id, query)
-        snippets: list[str] = [
-            f"{m.role.value}: {m.content}" for m in ctx.short_term_messages
-        ]
+        snippets: list[str] = [f"{m.role.value}: {m.content}" for m in ctx.short_term_messages]
         snippets.extend(item.content for item in ctx.long_term_items)
         return snippets[:limit]
 

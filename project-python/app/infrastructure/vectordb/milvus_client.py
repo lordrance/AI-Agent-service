@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Milvus 向量库管理器：集合生命周期与向量检索封装。"""
+"""Milvus 向量库管理器（已弃用）。
+
+主链路已改为 Pinecone（生产）/ pgvector（本地）。本模块仅保留供历史参考，请勿在新功能中引用。
+"""
 
 from __future__ import annotations
 
 import asyncio
+import warnings
 from typing import Any
 
 from loguru import logger
@@ -42,6 +46,11 @@ class MilvusManager:
         alias: str = "default",
         **conn_kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "MilvusManager 已弃用，请使用 VectorStore（pinecone / pgvector）",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._host = host
         self._port = port
         self._alias = alias

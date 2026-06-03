@@ -53,8 +53,6 @@ async def test_checkpoint_persists_across_graph_instances(require_db):
         assert out2 == "收到 3 条消息"
 
         # 校验最终状态包含 4 条消息（human1, ai1, human2, ai2）
-        state = await graph2.aget_state(
-            {"configurable": {"thread_id": thread_id}}
-        )
+        state = await graph2.aget_state({"configurable": {"thread_id": thread_id}})
         assert len(state.values["messages"]) == 4
         await saver2.adelete_thread(thread_id)

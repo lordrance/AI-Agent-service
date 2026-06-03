@@ -18,11 +18,7 @@ class _ScriptedLLM:
     async def acomplete(self, messages, **kwargs):
         self._calls += 1
         if self._calls == 1:
-            return (
-                "Thought: 需要计算 2+3\n"
-                'Action: calculator\n'
-                'Action Input: {"expression": "2+3"}'
-            )
+            return 'Thought: 需要计算 2+3\nAction: calculator\nAction Input: {"expression": "2+3"}'
         return "Thought: 已得到结果\nFinal Answer: 计算结果是 5"
 
 
