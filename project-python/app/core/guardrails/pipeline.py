@@ -60,7 +60,11 @@ def guard_output_text(
     parent_span: TraceSpan | None = None,
 ) -> str:
     """输出护栏：敏感片段拦截；记录 guardrails.output span。"""
-    span = tracer.start_child_span(trace_id, "guardrails.output", parent_span.span_id)
+    span = (
+        tracer.start_child_span(trace_id, "guardrails.output", parent_span.span_id)
+        if parent_span
+        else tracer.start_trace(trace_id, "guardrails.output")
+    )
     try:
         result = check_output_safety(text)
         if not result.allowed:

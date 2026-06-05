@@ -22,7 +22,7 @@ from app.core.rag.service import RagService
 from app.infrastructure.database.session import get_async_session
 from app.infrastructure.embeddings import get_embedder
 from app.infrastructure.llm.factory import build_model_router
-from app.infrastructure.llm.model_router import ModelRouter
+from app.infrastructure.llm.model_router import AllModelsUnavailableError, ModelRouter
 from app.infrastructure.trace.tracer import Tracer
 from app.infrastructure.vectordb.base import VectorStore
 from app.models.schemas import RagQueryRequest, RAGResponse
@@ -120,6 +120,10 @@ async def rag_query(
     except HTTPException:
         _tracer.end_span(span, error="guardrail")
         raise
+    except AllModelsUnavailableError as exc:
+        logger.warning("RAG 生成模型不可用: {}", exc)
+        _tracer.end_span(span, error=str(exc))
+        raise HTTPException(status_code=503, detail="生成模型暂不可用，请稍后重试") from exc
     except Exception as exc:
         logger.exception("RAG 查询失败: {}", exc)
         _tracer.end_span(span, error=str(exc))

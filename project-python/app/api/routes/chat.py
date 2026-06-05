@@ -19,6 +19,7 @@ from app.core.intent.recognizer import IntentRecognizer
 from app.core.langgraph.graph import append_chat_messages, run_chat
 from app.core.langgraph.model import _to_openai_messages
 from app.infrastructure.llm.factory import build_model_router
+from app.infrastructure.llm.model_router import AllModelsUnavailableError
 from app.infrastructure.trace.langfuse_exporter import export_trace
 from app.infrastructure.trace.tracer import Tracer
 from app.models.schemas import ChatRequest, ChatResponse
@@ -106,6 +107,11 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         return response
     except HTTPException:
         raise
+    except AllModelsUnavailableError as exc:
+        logger.warning("chat 模型不可用: {}", exc)
+        _tracer.end_span(span, error=str(exc))
+        export_trace(trace_id, _tracer.get_trace(trace_id))
+        raise HTTPException(status_code=503, detail="对话模型暂不可用，请稍后重试") from exc
     except Exception as exc:
         logger.exception("chat 失败: {}", exc)
         _tracer.end_span(span, error=str(exc))

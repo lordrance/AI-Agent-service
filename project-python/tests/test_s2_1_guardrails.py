@@ -8,6 +8,8 @@ from app.core.guardrails import (
     redact_pii,
     sanitize_user_input,
 )
+from app.core.guardrails.pipeline import guard_input_text, guard_output_text
+from app.infrastructure.trace.tracer import Tracer
 
 
 def test_detect_prompt_injection_positive():
@@ -34,3 +36,17 @@ def test_sanitize_user_input_blocks_injection():
 def test_check_output_safety_blocks_secrets():
     result = check_output_safety("Your api_key=sk-abc123 is leaked")
     assert not result.allowed
+
+
+def test_guard_output_text_without_parent_span_does_not_crash():
+    """省略 parent_span（默认 None）时不应抛 AttributeError，应自建顶层 span。"""
+    tracer = Tracer()
+    out = guard_output_text("这是一段正常的安全回答", tracer=tracer, trace_id="t-out")
+    assert out == "这是一段正常的安全回答"
+
+
+def test_guard_input_text_without_parent_span_does_not_crash():
+    """输入护栏同样应支持省略 parent_span。"""
+    tracer = Tracer()
+    out = guard_input_text("什么是 RAG？", tracer=tracer, trace_id="t-in")
+    assert out == "什么是 RAG？"

@@ -21,6 +21,8 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
 
 # Runtime artifacts (e.g. document upload staging in project-python)
 uploads/
