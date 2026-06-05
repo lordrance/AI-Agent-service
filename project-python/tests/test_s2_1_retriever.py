@@ -23,6 +23,21 @@ def test_bm25_ranks_relevant_doc_first():
     assert ranked[0][0] == "b"
 
 
+def test_bm25_incremental_add_keeps_correct_idf_and_avgdl():
+    """增量入库后 IDF 延迟重算应反映最新全语料；平均文档长用运行总长维护。"""
+    idx = _BM25Index()
+    idx.add_document("a", "alpha beta")
+    idx.add_document("b", "alpha gamma")
+    idx.add_document("c", "alpha delta")
+    # 稀有词只在 b 出现，应排第一
+    ranked = idx.search("gamma", top_k=3)
+    assert ranked[0][0] == "b"
+    # 常见词出现在所有文档，区分度低但仍能检索
+    assert idx.search("alpha", top_k=3)
+    # 运行总长维护的平均文档长应与实际一致（防止退回 O(N) 求和）
+    assert idx._avgdl == pytest.approx(idx._dl_sum / idx._N)  # noqa: SLF001
+
+
 @pytest.mark.asyncio
 async def test_hybrid_rrf_fuses_vector_and_keyword():
     class _FakeEmbed:

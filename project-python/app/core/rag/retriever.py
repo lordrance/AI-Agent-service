@@ -64,10 +64,13 @@ class _BM25Index:
         self._documents: list[str] = []
         self._doc_freqs: list[dict[str, int]] = []
         self._doc_lens: list[int] = []
+        self._dl_sum: int = 0
         self._avgdl: float = 0.0
         self._df: defaultdict[str, int] = defaultdict(int)
         self._N: int = 0
         self._idf: dict[str, float] = {}
+        # IDF 依赖全语料统计，入库时仅置脏，查询时按需重算一次，避免每次 add 都 O(vocab) 重算
+        self._idf_dirty: bool = False
 
     def clear(self) -> None:
         """清空索引。"""
@@ -75,13 +78,15 @@ class _BM25Index:
         self._documents.clear()
         self._doc_freqs.clear()
         self._doc_lens.clear()
+        self._dl_sum = 0
         self._avgdl = 0.0
         self._df.clear()
         self._N = 0
         self._idf.clear()
+        self._idf_dirty = False
 
     def add_document(self, doc_id: str, text: str) -> None:
-        """添加文档并更新统计量。"""
+        """添加文档并更新统计量（O(本文档 token 数)，IDF 延迟到查询时重算）。"""
         tokens = _tokenize(text)
         tf: defaultdict[str, int] = defaultdict(int)
         for t in tokens:
@@ -93,18 +98,24 @@ class _BM25Index:
         self._doc_freqs.append(dict(tf))
         self._doc_lens.append(len(tokens))
         self._N += 1
-        dl_sum = sum(self._doc_lens)
-        self._avgdl = dl_sum / self._N if self._N else 0.0
-        # 重新计算 IDF（对当前语料）
-        self._idf = {}
-        for term, df in self._df.items():
-            # 平滑 IDF
-            self._idf[term] = math.log(1.0 + (self._N - df + 0.5) / (df + 0.5))
+        self._dl_sum += len(tokens)
+        self._avgdl = self._dl_sum / self._N if self._N else 0.0
+        self._idf_dirty = True
+
+    def _recompute_idf(self) -> None:
+        """按当前全语料 df/N 重算平滑 IDF。"""
+        self._idf = {
+            term: math.log(1.0 + (self._N - df + 0.5) / (df + 0.5))
+            for term, df in self._df.items()
+        }
+        self._idf_dirty = False
 
     def search(self, query: str, top_k: int) -> list[tuple[str, float]]:
         """返回 (doc_id, bm25_score) 降序。"""
         if self._N == 0:
             return []
+        if self._idf_dirty:
+            self._recompute_idf()
         q_terms = _tokenize(query)
         if not q_terms:
             return []

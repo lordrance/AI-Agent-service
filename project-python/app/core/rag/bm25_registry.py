@@ -82,3 +82,15 @@ class TenantBm25Registry:
 
     def has_corpus(self, tenant_id: str) -> bool:
         return bool(self._texts.get(tenant_id))
+
+    def doc_count(self, tenant_id: str) -> int:
+        """该租户当前内存索引中的分块数（用于与数据库比对、检测陈旧）。"""
+        return len(self._texts.get(tenant_id, {}))
+
+    def is_synced(self, tenant_id: str, db_count: int) -> bool:
+        """内存索引是否已与数据库（共 db_count 条分块）同步。
+
+        考虑每租户上限：当数据库分块数超过上限时，内存只保留上限条，
+        此时内存条数等于上限即视为已同步，避免对超限租户每次查询都重建。
+        """
+        return self.doc_count(tenant_id) == min(db_count, self._max_docs)

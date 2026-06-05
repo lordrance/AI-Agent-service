@@ -22,6 +22,13 @@ from app.infrastructure.trace.genai_otel import genai_span, record_llm_usage
 _TRANSIENT_ERRORS = (RateLimitError, APIError, APIStatusError, TimeoutError, asyncio.TimeoutError)
 
 
+class AllModelsUnavailableError(RuntimeError):
+    """所有候选模型均不可用（熔断/鉴权失败/超时等耗尽后抛出）。
+
+    继承 RuntimeError 以保持向后兼容；路由层可据此返回 503 而非 500。
+    """
+
+
 def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
         return True
@@ -145,8 +152,8 @@ class ModelRouter:
 
         msg = "所有候选模型均不可用"
         if last_error:
-            raise RuntimeError(msg) from last_error
-        raise RuntimeError(msg)
+            raise AllModelsUnavailableError(msg) from last_error
+        raise AllModelsUnavailableError(msg)
 
     async def _invoke_with_resilience(
         self,

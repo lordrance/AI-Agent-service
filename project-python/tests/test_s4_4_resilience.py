@@ -58,3 +58,29 @@ async def test_model_router_timeout_enforced(monkeypatch):
 
     client.chat.completions.create = original  # type: ignore[method-assign]
     get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_model_router_raises_all_unavailable(monkeypatch):
+    """所有候选模型失败时抛 AllModelsUnavailableError（且兼容 RuntimeError）。"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_RETRY_MAX_ATTEMPTS", "1")
+    from app.config import get_settings
+    from app.infrastructure.llm.factory import build_model_router
+    from app.infrastructure.llm.model_router import AllModelsUnavailableError
+
+    get_settings.cache_clear()
+    router = build_model_router()
+    assert router is not None
+
+    async def boom(**kwargs):
+        raise ValueError("backend down")
+
+    for cfg in router._configs:  # noqa: SLF001
+        router._clients[cfg.model_id].chat.completions.create = boom  # type: ignore[method-assign]
+
+    assert issubclass(AllModelsUnavailableError, RuntimeError)
+    with pytest.raises(AllModelsUnavailableError):
+        await router.chat([{"role": "user", "content": "hi"}])
+
+    get_settings.cache_clear()
